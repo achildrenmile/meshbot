@@ -1,7 +1,19 @@
-"""!sota — Gipfel-Nachschlag über die SOTA-API v2."""
+"""!sota — Gipfel nachschlagen, per Referenz oder per Position.
+
+Zwei Wege, weil man am Gipfel selten die Referenz kennt, das Gerät aber die
+Koordinaten hat:
+
+    !sota kt-048          -> Nachschlag ueber die SOTA-API
+    !sota 46.60 13.67     -> naechstgelegene Gipfel aus dem lokalen Bestand
+
+Der lokale Bestand (`data/sota_summits.json`) stammt aus der SOTA-API und deckt
+Kaernten samt Nachbarregionen ab. Er braucht kein Netz und antwortet sofort.
+"""
 
 from __future__ import annotations
 
+import json
+import math
 import re
 from typing import Any
 
@@ -54,3 +66,66 @@ def render(ref: str, gipfel: dict[str, Any] | None, stale: bool = False) -> str:
     if akt is not None:
         teile.append(f"Akt: {int(akt)}")
     return teile[0] + " " + ", ".join(teile[1:])
+
+
+# --- Suche nach Position -------------------------------------------------
+
+HIMMEL = ["N", "NO", "O", "SO", "S", "SW", "W", "NW"]
+KOORD = re.compile(r"^\s*(-?\d{1,3}[.,]\d+)[\s,]+(-?\d{1,3}[.,]\d+)\s*$")
+
+
+def load_summits(pfad: Any) -> list[dict[str, Any]]:
+    with open(pfad, encoding="utf-8") as fh:
+        return json.load(fh)["gipfel"]
+
+
+def parse_coords(arg: str) -> tuple[float, float] | None:
+    """`46.60 13.67` oder `46,60, 13,67` -> (lat, lon). Sonst None."""
+    m = KOORD.match(arg)
+    if not m:
+        return None
+    lat = float(m.group(1).replace(",", "."))
+    lon = float(m.group(2).replace(",", "."))
+    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        return None
+    return lat, lon
+
+
+def distanz_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    r = 6371.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dp = p2 - p1
+    dl = math.radians(lon2 - lon1)
+    a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    return 2 * r * math.asin(math.sqrt(a))
+
+
+def richtung(lat1: float, lon1: float, lat2: float, lon2: float) -> str:
+    """Grobe Himmelsrichtung vom Standort zum Gipfel."""
+    dl = math.radians(lon2 - lon1)
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    y = math.sin(dl) * math.cos(p2)
+    x = math.cos(p1) * math.sin(p2) - math.sin(p1) * math.cos(p2) * math.cos(dl)
+    grad = (math.degrees(math.atan2(y, x)) + 360) % 360
+    return HIMMEL[int(grad / 45 + 0.5) % 8]
+
+
+def nearest(summits: list[dict[str, Any]], lat: float, lon: float, limit: int = 2) -> list[dict[str, Any]]:
+    """Naechstgelegene Gipfel, mit Entfernung und Richtung angereichert."""
+    treffer = []
+    for s in summits:
+        d = distanz_km(lat, lon, s["lat"], s["lon"])
+        if d < 25:                       # weiter weg ist als Standortangabe wertlos
+            treffer.append({**s, "_d": d, "_r": richtung(lat, lon, s["lat"], s["lon"])})
+    treffer.sort(key=lambda s: s["_d"])
+    return treffer[:limit]
+
+
+def render_nearest(treffer: list[dict[str, Any]]) -> str:
+    if not treffer:
+        return "SOTA: kein Gipfel in 25km"
+    teile = []
+    for s in treffer:
+        entfernung = f"{s['_d']*1000:.0f}m" if s["_d"] < 1 else f"{s['_d']:.1f}km"
+        teile.append(f"{s['ref']} {s['name']} {s['alt']}m {s['pts']}Pkt ({entfernung} {s['_r']})")
+    return " | ".join(teile)

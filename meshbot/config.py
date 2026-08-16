@@ -74,6 +74,7 @@ class Settings(BaseSettings):
 
     stations_file: Path = Field(default=DATA_DIR / "stations_ktn.json")
     relais_file: Path = Field(default=DATA_DIR / "relais_oe.json")
+    summits_file: Path = Field(default=DATA_DIR / "sota_summits.json")
 
 
 def load_settings() -> Settings:

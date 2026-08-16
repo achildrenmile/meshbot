@@ -29,6 +29,7 @@ class Bot:
         self.http = httpx.AsyncClient(timeout=settings.http_timeout_s, headers={"User-Agent": "MeshBot/1.0 (CarinthiaMesh)"})
         self.stations = h_wx.load_stations(settings)
         self.relais = h_relais.load_relais(settings.relais_file)
+        self.summits = h_sota.load_summits(settings.summits_file)
         self.cache_wx: TTLCache = TTLCache(maxsize=64, ttl=settings.cache_ttl_wx_s)
         self.cache_uwz: TTLCache = TTLCache(maxsize=4, ttl=settings.cache_ttl_uwz_s)
         self.cache_sota: TTLCache = TTLCache(maxsize=256, ttl=settings.cache_ttl_sota_s)
@@ -70,6 +71,12 @@ class Bot:
         return h_uwz.render(warnungen)
 
     async def cmd_sota(self, arg: str, sender: str) -> str | None:
+        # Position statt Referenz: am Gipfel kennt man die Referenz selten,
+        # das Geraet aber die Koordinaten.
+        koord = h_sota.parse_coords(arg)
+        if koord is not None:
+            return h_sota.render_nearest(h_sota.nearest(self.summits, *koord))
+
         ref = h_sota.normalise(arg, self.settings.sota_default_assoc)
         if ref is None:
             return f"SOTA: {arg[:16]} nicht gefunden"
@@ -79,7 +86,14 @@ class Bot:
             gipfel = await self._mit_retry(h_sota.fetch, self.settings.sota_url, ref)
         except Exception:
             alt = self.stale.get(f"sota:{ref}")
-            return h_sota.render(ref, alt, stale=True) if alt else "SOTA: Quelle nicht erreichbar"
+            if alt:
+                return h_sota.render(ref, alt, stale=True)
+            lokal = next((s for s in self.summits if s["ref"] == ref), None)
+            if lokal:                       # eigener Bestand statt Fehlermeldung
+                return h_sota.render(ref, {"name": lokal["name"], "altM": lokal["alt"],
+                                           "points": lokal["pts"], "activationCount": lokal["akt"]},
+                                     stale=True)
+            return "SOTA: Quelle nicht erreichbar"
         self.cache_sota[ref] = gipfel
         if gipfel:
             self.stale[f"sota:{ref}"] = gipfel
@@ -102,7 +116,7 @@ class Bot:
         return f"{self.settings.bot_name} OK, up {self.router.uptime()}, {self.router.served} cmds"
 
     async def cmd_help(self, arg: str, sender: str) -> str:
-        return "Cmds: !wx <ort> !uwz !sota <ref> !relais <band> [ort] !ping"
+        return "Cmds: !wx <ort> !uwz !sota <ref|lat lon> !relais <band> [ort] !ping"
 
     # --- Infrastruktur ---------------------------------------------------
 
@@ -145,7 +159,8 @@ class Bot:
         self.mqtt.start(loop)
         health = asyncio.create_task(serve_health(self.settings, self))
         log.info("gestartet", rx=self.settings.topic_rx, tx=self.settings.topic_tx,
-                 enabled=self.router.enabled, relais=len(self.relais), orte=len(self.stations))
+                 enabled=self.router.enabled, relais=len(self.relais),
+                 orte=len(self.stations), gipfel=len(self.summits))
         await stop.wait()
         log.info("beende")
         health.cancel()

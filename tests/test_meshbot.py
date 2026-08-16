@@ -251,6 +251,45 @@ def test_sota_ungueltig():
     assert h_sota.normalise("völliger unsinn", "OE/KT") is None
 
 
+@pytest.mark.parametrize("roh,erwartet", [
+    ("46.60 13.67", (46.60, 13.67)),
+    ("46,6031, 13,6712", (46.6031, 13.6712)),
+    ("47.0744  12.6942", (47.0744, 12.6942)),
+])
+def test_sota_koordinaten_erkennen(roh, erwartet):
+    assert h_sota.parse_coords(roh) == erwartet
+
+
+@pytest.mark.parametrize("roh", ["kt-048", "", "999.9 13.6", "46.6", "villach"])
+def test_sota_keine_koordinaten(roh):
+    assert h_sota.parse_coords(roh) is None
+
+
+def test_sota_naechster_gipfel_mit_richtung():
+    gipfel = [
+        {"ref": "OE/KT-072", "name": "Dobratsch", "alt": 2166, "pts": 8, "akt": 90, "lat": 46.6031, "lon": 13.6712},
+        {"ref": "OE/KT-001", "name": "Grossglockner", "alt": 3798, "pts": 10, "akt": 40, "lat": 47.0744, "lon": 12.6942},
+    ]
+    treffer = h_sota.nearest(gipfel, 46.6035, 13.6700, limit=2)
+    assert treffer[0]["ref"] == "OE/KT-072"          # der Glockner liegt weiter als 25 km
+    assert len(treffer) == 1
+    text = h_sota.render_nearest(treffer)
+    assert "OE/KT-072" in text and "m " in text and len(text) <= 140
+
+
+def test_sota_ohne_gipfel_in_reichweite():
+    assert h_sota.render_nearest([]) == "SOTA: kein Gipfel in 25km"
+
+
+def test_echte_gipfeldaten_ladbar():
+    """Der lokale Bestand traegt !sota auch ohne Internet."""
+    s = Settings(mqtt_host="test")
+    gipfel = h_sota.load_summits(s.summits_file)
+    assert len(gipfel) > 1000
+    treffer = h_sota.nearest(gipfel, 46.6031, 13.6712, limit=1)
+    assert treffer and treffer[0]["ref"] == "OE/KT-072"   # Villacher Alpe
+
+
 def test_sota_render_nicht_gefunden():
     assert h_sota.render("OE/KT-999", None) == "SOTA: OE/KT-999 nicht gefunden"
 

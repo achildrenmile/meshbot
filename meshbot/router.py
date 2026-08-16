@@ -40,19 +40,54 @@ ALIASES = {
 }
 
 
+def dig(data: dict[str, Any], pfad: str) -> Any:
+    """Verschachtelten Wert holen: `payload.text` steigt zwei Ebenen hinab.
+
+    Die Bruecke verpackt das Ereignis, der Nutztext liegt eine Ebene tiefer.
+    Ein Punktpfad haelt das konfigurierbar, statt das Format anzunehmen.
+    """
+    wert: Any = data
+    for teil in pfad.split("."):
+        if not isinstance(wert, dict):
+            return None
+        wert = wert.get(teil)
+    return wert
+
+
+def split_sender_prefix(text: str) -> tuple[str | None, str]:
+    """`"AT-Node: !help"` -> `("AT-Node", "!help")`.
+
+    MeshCore stellt bei Kanalnachrichten den Absendernamen voran — der Befehl
+    beginnt dadurch nicht mit `!`. Dieselbe Trennung macht auch die App.
+    """
+    stelle = text.find(": ")
+    if 0 < stelle < 50:
+        name = text[:stelle]
+        if not any(z in name for z in ":[]!"):
+            return name, text[stelle + 2:].strip()
+    return None, text
+
+
 def parse_payload(raw: bytes | str, settings: Settings) -> Eingang | None:
     """Rohnutzlast der Bruecke in Text, Absender und Kanal zerlegen."""
     if isinstance(raw, bytes):
         raw = raw.decode("utf-8", errors="replace")
     if settings.payload_format == "text":
-        return Eingang(text=raw.strip(), sender="unbekannt", channel=None)
+        name, text = split_sender_prefix(raw.strip())
+        return Eingang(text=text, sender=name or "unbekannt", channel=None)
     try:
         data: dict[str, Any] = json.loads(raw)
     except json.JSONDecodeError:
         return None
-    text = str(data.get(settings.json_path_text, "") or "").strip()
-    sender = str(data.get(settings.json_path_sender, "") or "unbekannt").strip()
-    channel = data.get(settings.json_path_channel)
+    text = str(dig(data, settings.json_path_text) or "").strip()
+    sender = str(dig(data, settings.json_path_sender) or "").strip()
+    channel = dig(data, settings.json_path_channel)
+
+    # Absender steht bei Kanalnachrichten im Text, nicht in einem eigenen Feld.
+    name, text = split_sender_prefix(text)
+    if not sender:
+        sender = name or "unbekannt"
+
     return Eingang(text=text, sender=sender, channel=None if channel is None else str(channel))
 
 

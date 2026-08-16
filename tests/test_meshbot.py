@@ -23,16 +23,28 @@ from meshbot.handlers import sota as h_sota  # noqa: E402
 from meshbot.handlers import uwz as h_uwz  # noqa: E402
 from meshbot.handlers import wx as h_wx  # noqa: E402
 from meshbot.ratelimit import Deduplicator, SenderLimiter, TokenBucket  # noqa: E402
-from meshbot.router import Router, parse_command, parse_payload  # noqa: E402
+from meshbot.router import Router, dig, parse_command, parse_payload, split_sender_prefix  # noqa: E402
 
 
 @pytest.fixture
 def settings() -> Settings:
-    return Settings(mqtt_host="test", channel_filter="", bot_name="MeshBot")
+    return settings_echt()
 
 
 def payload(text: str, sender: str = "OE8TEST", channel: str = "3") -> str:
-    return json.dumps({"text": text, "sender": sender, "channel_idx": channel})
+    """Nutzlast im Format der Bruecke: Ereignis aussen, Nutztext eine Ebene tiefer,
+    Absendername als Praefix im Text — so kommt es tatsaechlich an."""
+    return json.dumps({
+        "type": "EventType.CHANNEL_MSG_RECV",
+        "payload": {"type": "CHAN", "SNR": 11.5, "channel_idx": int(channel),
+                    "text": f"{sender}: {text}"},
+    })
+
+
+def settings_echt() -> Settings:
+    return Settings(mqtt_host="test", bot_name="MeshBot",
+                    json_path_text="payload.text", json_path_sender="payload.sender",
+                    json_path_channel="payload.channel_idx")
 
 
 # --- Formatierung ---------------------------------------------------------
@@ -75,9 +87,32 @@ def test_parse_command_ignoriert_alles_andere(text):
     assert parse_command(text) is None
 
 
-def test_parse_payload_json(settings):
-    e = parse_payload(payload("!ping"), settings)
-    assert e is not None and e.text == "!ping" and e.sender == "OE8TEST"
+def test_parse_payload_echte_bruecke(settings):
+    """Genau die Nutzlast, die meshcore-mqtt auf message/channel/<n> legt."""
+    roh = ('{"type": "EventType.CHANNEL_MSG_RECV", "payload": {"type": "CHAN", '
+           '"SNR": 11.5, "channel_idx": 3, "path_len": 64, "txt_type": 0, '
+           '"sender_timestamp": 1786889382, "text": "AT-achildrenmile: !help"}}')
+    e = parse_payload(roh, settings)
+    assert e is not None
+    assert e.text == "!help"                 # Praefix entfernt
+    assert e.sender == "AT-achildrenmile"    # Absender aus dem Praefix
+    assert e.channel == "3"
+
+
+def test_dig_holt_verschachtelt():
+    assert dig({"payload": {"text": "hallo"}}, "payload.text") == "hallo"
+    assert dig({"payload": {}}, "payload.text") is None
+    assert dig({"text": "flach"}, "text") == "flach"
+
+
+@pytest.mark.parametrize("roh,name,rest", [
+    ("AT-Node: !help", "AT-Node", "!help"),
+    ("OE8YML: !wx villach", "OE8YML", "!wx villach"),
+    ("!ping", None, "!ping"),                       # ohne Praefix
+    ("http://x: !ping", None, "http://x: !ping"),   # kein Name
+])
+def test_split_sender_prefix(roh, name, rest):
+    assert split_sender_prefix(roh) == (name, rest)
 
 
 def test_parse_payload_kaputt(settings):

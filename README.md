@@ -41,6 +41,19 @@ Koordinaten. `!sota 46.60 13.67` liefert die nächstgelegenen Gipfel mit Entfern
 und Himmelsrichtung — über 25 km Entfernung kommt nichts, das wäre als
 Standortangabe wertlos.
 
+Die Position darf in beliebiger Schreibweise dahinterstehen, damit man sie aus der
+App einfach hineinkopieren kann statt sie abzutippen:
+
+```
+!sota 46.6031, 13.6712
+!sota 46,6031, 13,6712
+!sota geo:46.6031,13.6712
+!sota https://maps.google.com/?q=46.6031,13.6712
+```
+
+Gesucht werden die ersten zwei Dezimalzahlen im Text — ganze Zahlen wie ein
+Zoomfaktor in einem Kartenlink stören nicht.
+
 ## Datenquellen
 
 | Befehl | Quelle | Lizenz / Hinweis |

@@ -71,7 +71,10 @@ def render(ref: str, gipfel: dict[str, Any] | None, stale: bool = False) -> str:
 # --- Suche nach Position -------------------------------------------------
 
 HIMMEL = ["N", "NO", "O", "SO", "S", "SW", "W", "NW"]
-KOORD = re.compile(r"^\s*(-?\d{1,3}[.,]\d+)[\s,]+(-?\d{1,3}[.,]\d+)\s*$")
+# Zwei Dezimalzahlen irgendwo im Text. Bewusst grosszuegig: Was die App beim
+# Teilen einer Position einfuegt, ist nicht vorhersagbar - mal nackte Zahlen,
+# mal ein geo:-Link, mal mit Beschriftung davor. Abtippen soll niemand muessen.
+ZAHL = re.compile(r"-?\d{1,3}[.,]\d+")
 
 
 def load_summits(pfad: Any) -> list[dict[str, Any]]:
@@ -80,12 +83,28 @@ def load_summits(pfad: Any) -> list[dict[str, Any]]:
 
 
 def parse_coords(arg: str) -> tuple[float, float] | None:
-    """`46.60 13.67` oder `46,60, 13,67` -> (lat, lon). Sonst None."""
-    m = KOORD.match(arg)
-    if not m:
+    """Position aus beliebigem Text ziehen. None, wenn keine drinsteckt.
+
+    Erkannt werden unter anderem::
+
+        46.60 13.67
+        46.6031, 13.6712
+        46,6031, 13,6712              (deutsches Dezimalkomma)
+        geo:46.6031,13.6712
+        https://maps.google.com/?q=46.6031,13.6712
+        Position: 46.6031 / 13.6712
+
+    Gesucht werden die ersten zwei Dezimalzahlen; ganze Zahlen wie ein
+    Zoomfaktor in einem Kartenlink fallen dadurch nicht ins Gewicht.
+    """
+    treffer = ZAHL.findall(arg)
+    if len(treffer) < 2:
         return None
-    lat = float(m.group(1).replace(",", "."))
-    lon = float(m.group(2).replace(",", "."))
+    try:
+        lat = float(treffer[0].replace(",", "."))
+        lon = float(treffer[1].replace(",", "."))
+    except ValueError:
+        return None
     if not (-90 <= lat <= 90 and -180 <= lon <= 180):
         return None
     return lat, lon

@@ -253,14 +253,19 @@ def test_sota_ungueltig():
 
 @pytest.mark.parametrize("roh,erwartet", [
     ("46.60 13.67", (46.60, 13.67)),
-    ("46,6031, 13,6712", (46.6031, 13.6712)),
+    ("46.6031, 13.6712", (46.6031, 13.6712)),
+    ("46,6031, 13,6712", (46.6031, 13.6712)),        # deutsches Dezimalkomma
     ("47.0744  12.6942", (47.0744, 12.6942)),
+    ("geo:46.6031,13.6712", (46.6031, 13.6712)),
+    ("https://maps.google.com/?q=46.6031,13.6712&z=15", (46.6031, 13.6712)),
+    ("Position: 46.6031 / 13.6712", (46.6031, 13.6712)),
+    ("\U0001F4CD 46.6031 13.6712", (46.6031, 13.6712)),
 ])
 def test_sota_koordinaten_erkennen(roh, erwartet):
     assert h_sota.parse_coords(roh) == erwartet
 
 
-@pytest.mark.parametrize("roh", ["kt-048", "", "999.9 13.6", "46.6", "villach"])
+@pytest.mark.parametrize("roh", ["kt-048", "OE/KT-048", "", "999.9 13.6", "46.6031", "villach"])
 def test_sota_keine_koordinaten(roh):
     assert h_sota.parse_coords(roh) is None
 

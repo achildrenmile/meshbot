@@ -13,7 +13,11 @@ COPY meshbot ./meshbot
 COPY data ./data
 
 # Nicht als root. Der Bot braucht kein Schreibrecht im Dateisystem.
-RUN useradd --system --uid 10001 meshbot && chown -R meshbot:meshbot /srv
+# /data gehoert dem Dienstbenutzer, sonst kann er im gemounteten Volume nicht
+# schreiben — ein frisches Named Volume uebernimmt die Rechte aus dem Image.
+RUN useradd --system --uid 10001 meshbot \
+    && mkdir -p /data \
+    && chown -R meshbot:meshbot /srv /data
 USER meshbot
 EXPOSE 8080
 

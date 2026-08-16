@@ -14,8 +14,14 @@ services:
     container_name: meshbot
     restart: unless-stopped
     env_file: .env
+    volumes:
+      # Meldungen aus dem Funknetz muessen einen Neustart ueberleben.
+      - meldungen:/data
     logging:
       driver: json-file
       options:
         max-size: "10m"
         max-file: "3"
+
+volumes:
+  meldungen:

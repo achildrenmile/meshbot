@@ -43,6 +43,15 @@ ALIASES = {
     "netz": "netz", "status": "netz",
     "vorhersage": "vorhersage", "morgen": "vorhersage", "fc": "vorhersage",
     "zeit": "zeit", "time": "zeit", "utc": "zeit",
+    "wo": "wo", "node": "wo",
+    "melde": "melde", "luecke": "melde", "report": "melde",
+    "qth": "qth", "loc": "qth", "locator": "qth",
+    "sicht": "sicht", "los": "sicht", "sichtverbindung": "sicht",
+    "hoehe": "hoehe", "höhe": "hoehe", "alt": "hoehe", "seehoehe": "hoehe",
+    "dist": "dist", "distanz": "dist", "entfernung": "dist", "peilung": "dist",
+    "dx": "dx", "solar": "dx", "bedingungen": "dx",
+    "mond": "mond", "moon": "mond",
+    "iss": "iss", "sat": "iss",
 }
 
 

@@ -66,6 +66,9 @@ class Settings(BaseSettings):
     cache_ttl_lawine_s: int = 3600
     cache_ttl_forecast_s: int = 1800
     cache_ttl_netz_s: int = 600
+    cache_ttl_dx_s: int = 900
+    cache_ttl_tle_s: int = 21600           # TLE altern langsam, 6h reicht
+    cache_ttl_gelaende_s: int = 604800     # Berge bewegen sich nicht
 
     geosphere_tawes_url: str = (
         "https://dataset.api.hub.geosphere.at/v1/station/current/tawes-v1-10min"
@@ -76,7 +79,18 @@ class Settings(BaseSettings):
     lawine_region: str = "AT-02"
     forecast_url: str = "https://dataset.api.hub.geosphere.at/v1/timeseries/forecast/nwp-v1-1h-2500m"
     map_url: str = "https://map.carinthiamesh.com"
+    topo_url: str = "https://api.opentopodata.org/v1/eudem25m"
+    hamqsl_url: str = "https://www.hamqsl.com/solarxml.php"
+    tle_url: str = "https://celestrak.org/NORAD/elements/gp.php?CATNR=25544&FORMAT=TLE"
+
+    # Profilaufloesung fuer !sicht. 85 Punkte passen in eine Abfrage der
+    # freien Hoehen-API (Grenze 100) und ergeben bei 20 km rund 235 m
+    # Schrittweite -- fein genug, um einen Grat nicht zu uebersehen.
+    sicht_punkte: int = 85
+    sicht_mast_m: float = 3.0
     tz_offset_h: int = 2
+    meldungen_datei: Path = Field(default=Path("/data/meldungen.jsonl"))
+    topic_meldung: str = "meshinfra/bot/meldung"
 
     health_port: int = 8080
     log_level: str = "INFO"

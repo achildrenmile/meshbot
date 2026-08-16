@@ -13,11 +13,18 @@ import structlog
 from cachetools import TTLCache
 
 from .config import Settings, load_settings
+from .handlers import dx as h_dx
+from .handlers import geo as h_geo
+from .handlers import iss as h_iss
 from .handlers import lawine as h_lawine
+from .handlers import mond as h_mond
+from .handlers import melde as h_melde
 from .handlers import netz as h_netz
 from .handlers import relais as h_relais
 from .handlers import sonne as h_sonne
+from .handlers import qth as h_qth
 from .handlers import spot as h_spot
+from .handlers import wo as h_wo
 from .handlers import vorhersage as h_fc
 from .handlers import sota as h_sota
 from .handlers import uwz as h_uwz
@@ -43,12 +50,18 @@ class Bot:
         self.cache_lawine: TTLCache = TTLCache(maxsize=4, ttl=settings.cache_ttl_lawine_s)
         self.cache_fc: TTLCache = TTLCache(maxsize=32, ttl=settings.cache_ttl_forecast_s)
         self.cache_netz: TTLCache = TTLCache(maxsize=2, ttl=settings.cache_ttl_netz_s)
+        self.cache_dx: TTLCache = TTLCache(maxsize=2, ttl=settings.cache_ttl_dx_s)
+        self.cache_tle: TTLCache = TTLCache(maxsize=2, ttl=settings.cache_ttl_tle_s)
+        self.cache_gelaende: TTLCache = TTLCache(maxsize=128, ttl=settings.cache_ttl_gelaende_s)
         self.stale: dict[str, Any] = {}          # letzte gute Antwort je Schlüssel
         self.router = Router(settings, {
             "wx": self.cmd_wx, "uwz": self.cmd_uwz, "sota": self.cmd_sota,
             "relais": self.cmd_relais, "ping": self.cmd_ping, "help": self.cmd_help,
             "sonne": self.cmd_sonne, "spot": self.cmd_spot, "lawine": self.cmd_lawine,
             "netz": self.cmd_netz, "vorhersage": self.cmd_vorhersage, "zeit": self.cmd_zeit,
+            "wo": self.cmd_wo, "melde": self.cmd_melde, "qth": self.cmd_qth,
+            "sicht": self.cmd_sicht, "hoehe": self.cmd_hoehe, "dist": self.cmd_dist,
+            "dx": self.cmd_dx, "mond": self.cmd_mond, "iss": self.cmd_iss,
         })
         self.mqtt = MqttClient(settings, on_message=self.on_message, on_admin=self.on_admin)
 
@@ -201,12 +214,147 @@ class Bot:
         self.stale[f"fc:{schluessel}"] = werte
         return h_fc.render(ort, werte)
 
+    async def cmd_wo(self, arg: str, sender: str) -> str | None:
+        if not arg.strip():
+            return "!wo <name> — Zustand eines Knotens"
+        jetzt = datetime.now(timezone.utc)
+        if "nodes" not in self.cache_netz:
+            try:
+                self.cache_netz["nodes"] = await self._mit_retry(h_wo.fetch, self.settings.map_url)
+            except Exception:
+                alt = self.stale.get("nodes")
+                if not alt:
+                    return "Node: Karte nicht erreichbar"
+                self.cache_netz["nodes"] = alt
+        nodes = self.cache_netz["nodes"]
+        self.stale["nodes"] = nodes
+        return h_wo.render(arg, h_wo.suche(nodes, arg), jetzt)
+
+    async def cmd_melde(self, arg: str, sender: str) -> str | None:
+        if len(arg.strip()) < 4:
+            return "!melde <was, wo> — Luecke oder Stoerung melden"
+        meldung = h_melde.erfassen(arg, sender, datetime.now(timezone.utc))
+        nummer = h_melde.speichern(meldung, self.settings.meldungen_datei)
+        # Auch auf MQTT, damit andere Dienste daraus etwas machen koennen.
+        self.mqtt.publish(self.settings.topic_meldung, json.dumps({**meldung, "nr": nummer}, ensure_ascii=False))
+        log.info("meldung", nr=nummer, von=sender, text=meldung["text"][:60])
+        return h_melde.render(meldung, nummer)
+
+    async def cmd_qth(self, arg: str, sender: str) -> str:
+        koord = h_sota.parse_coords(arg)
+        if koord is not None:
+            return h_qth.render_koord(*koord)
+        loc = arg.strip()
+        if not loc:
+            return "!qth <locator|lat lon> — Locator umrechnen"
+        return h_qth.render_locator(loc, h_qth.from_locator(loc))
+
     async def cmd_zeit(self, arg: str, sender: str) -> str:
         jetzt = datetime.now(timezone.utc)
         return f"UTC {jetzt:%d.%m.%Y %H:%M:%S} (Epoch {int(jetzt.timestamp())})"
 
     async def cmd_ping(self, arg: str, sender: str) -> str:
         return f"{self.settings.bot_name} OK, up {self.router.uptime()}, {self.router.served} cmds"
+
+    # --- Standort und Gelaende ----------------------------------------
+
+    async def cmd_sicht(self, arg: str, sender: str) -> str:
+        """Funkstrecke zwischen zwei Punkten pruefen.
+
+        Der teuerste Befehl im Bot: eine Hoehenabfrage ueber 85 Punkte. Das
+        Ergebnis wird eine Woche lang behalten -- das Gelaende aendert sich
+        nicht, und dieselbe Strecke wird erfahrungsgemaess mehrfach gefragt.
+        """
+        punkte = h_geo.parse_punkte(arg, 2)
+        if punkte is None:
+            return "!sicht <lat,lon> <lat,lon> — zwei Positionen noetig"
+        a, b = punkte
+        dist = h_geo.distanz_km(a, b)
+        if dist < 0.2:
+            return "Sicht: die beiden Punkte sind praktisch derselbe"
+        if dist > 200:
+            return f"Sicht: {dist:.0f}km ist zu weit fuer eine sinnvolle Rechnung"
+
+        schluessel = f"{a[0]:.4f},{a[1]:.4f}>{b[0]:.4f},{b[1]:.4f}"
+        if schluessel in self.cache_gelaende:
+            return h_geo.render_sicht(self.cache_gelaende[schluessel])
+        n = self.settings.sicht_punkte
+        strecke = [h_geo.zwischenpunkt(a, b, i / (n - 1)) for i in range(n)]
+        try:
+            hoehen = await h_geo.hoehen(self.http, self.settings.topo_url, strecke)
+        except Exception:
+            return "Sicht: Hoehenmodell nicht erreichbar"
+        mast = self.settings.sicht_mast_m
+        eng = h_geo.bewerte_profil(hoehen, dist, mast, mast)
+        self.cache_gelaende[schluessel] = eng
+        return h_geo.render_sicht(eng)
+
+    async def cmd_hoehe(self, arg: str, sender: str) -> str:
+        punkte = h_geo.parse_punkte(arg, 1)
+        if punkte is None:
+            return "!hoehe <lat,lon> — Gelaendehoehe an einer Position"
+        p = punkte[0]
+        schluessel = f"h:{p[0]:.4f},{p[1]:.4f}"
+        if schluessel in self.cache_gelaende:
+            return h_geo.render_hoehe(p, self.cache_gelaende[schluessel])
+        try:
+            meter = (await h_geo.hoehen(self.http, self.settings.topo_url, [p]))[0]
+        except Exception:
+            return "Hoehe: Hoehenmodell nicht erreichbar"
+        self.cache_gelaende[schluessel] = meter
+        return h_geo.render_hoehe(p, meter)
+
+    async def cmd_dist(self, arg: str, sender: str) -> str:
+        """Reine Rechnung, keine Quelle, keine Wartezeit."""
+        punkte = h_geo.parse_punkte(arg, 2)
+        if punkte is None:
+            return "!dist <lat,lon> <lat,lon> — Entfernung und Peilung"
+        return h_geo.render_dist(*punkte)
+
+    # --- Himmel ---------------------------------------------------------
+
+    async def cmd_dx(self, arg: str, sender: str) -> str:
+        if "aktuell" in self.cache_dx:
+            return h_dx.render(self.cache_dx["aktuell"])
+        try:
+            werte = await self._mit_retry(h_dx.fetch, self.settings.hamqsl_url)
+        except Exception:
+            alt = self.stale.get("dx")
+            return h_dx.render(alt) if alt else "DX: Quelle nicht erreichbar"
+        self.cache_dx["aktuell"] = werte
+        self.stale["dx"] = werte
+        return h_dx.render(werte)
+
+    async def cmd_mond(self, arg: str, sender: str) -> str:
+        koord = h_sota.parse_coords(arg)
+        if koord is None:
+            treffer = h_wx.resolve_place(arg, self.stations, self.settings.default_location)
+            koord = (treffer[1]["lat"], treffer[1]["lon"]) if treffer else (46.61, 13.86)
+        jetzt = datetime.now(timezone.utc)
+        werte = h_mond.ereignisse(jetzt.date(), *koord)
+        return h_mond.render(werte, self.settings.tz_offset_h)
+
+    async def cmd_iss(self, arg: str, sender: str) -> str:
+        koord = h_sota.parse_coords(arg)
+        if koord is None:
+            koord = (46.61, 13.86)
+        alt = False
+        if "tle" in self.cache_tle:
+            tle = self.cache_tle["tle"]
+        else:
+            try:
+                tle = await self._mit_retry(h_iss.fetch_tle, self.settings.tle_url)
+                self.cache_tle["tle"] = tle
+                self.stale["tle"] = tle
+            except Exception:
+                tle = self.stale.get("tle")
+                if tle is None:
+                    return "ISS: Bahndaten nicht erreichbar"
+                alt = True                     # gealterte TLE, Zeiten ungenauer
+        jetzt = datetime.now(timezone.utc)
+        # Die Bahnrechnung ist reine CPU-Arbeit und blockiert sonst die Schleife.
+        ueberflug = await asyncio.to_thread(h_iss.naechster_ueberflug, tle, *koord, jetzt)
+        return h_iss.render(ueberflug, self.settings.tz_offset_h, alt)
 
     HILFE = {
         "wx": "!wx <ort|lat lon> Wetter der naechsten Station. Tippfehler egal",
@@ -221,15 +369,49 @@ class Bot:
         "zeit": "!zeit UTC und Epoch-Sekunden, fuer Uhren am Node",
         "ping": "!ping Lebenszeichen des Bots, taugt auch als Reichweitentest",
         "help": "!help zeigt alle Befehle, !help <cmd> die Einzelheiten",
+        "wo": "!wo <name> Position, Verkehr und letzter Empfang eines Knotens",
+        "melde": "!melde <was, wo> Luecke oder Stoerung melden, Position mitschicken",
+        "qth": "!qth <locator|lat lon> Maidenhead in Koordinaten und zurueck",
+        "sicht": "!sicht <lat,lon> <lat,lon> Funkstrecke pruefen: frei, knapp oder blockiert",
+        "hoehe": "!hoehe <lat,lon> Gelaendehoehe aus dem 25m-Modell",
+        "dist": "!dist <lat,lon> <lat,lon> Entfernung, Peilung und Gegenpeilung",
+        "dx": "!dx Kurzwellenbedingungen: Sonnenfluss, A- und K-Index",
+        "mond": "!mond [ort|lat lon] Auf-, Untergang und Phase",
+        "iss": "!iss [lat lon] naechster Ueberflug der Raumstation ueber 10 Grad",
+    }
+
+    # Gruppen fuer die zweite Hilfestufe. Die Reihenfolge ist die der Uebersicht.
+    GRUPPEN = {
+        "wetter": ["wx", "vorhersage", "uwz", "lawine"],
+        "berg": ["sota", "spot", "sonne", "mond"],
+        "standort": ["sicht", "hoehe", "dist", "qth"],
+        "netz": ["netz", "wo", "relais", "ping"],
+        "sonst": ["dx", "iss", "zeit", "melde"],
     }
 
     async def cmd_help(self, arg: str, sender: str) -> str:
-        """Zweistufig, weil eine Zeile fuer zehn Befehle nicht reicht."""
+        """Dreistufig: Einzelbefehl, Gruppe, Uebersicht."""
         thema = arg.strip().lstrip("!").lower()
         if thema in self.HILFE:
             return self.HILFE[thema]
-        return ("Cmds: !wx !vorhersage !uwz !lawine !sota !spot !relais !sonne !netz !zeit "
-                "!ping. Ort immer auch als lat lon. Details: !help <cmd>")
+        if thema in self.GRUPPEN:
+            return f"{thema.title()}: " + " ".join("!" + c for c in self.GRUPPEN[thema])
+        return self._uebersicht()
+
+    def _uebersicht(self) -> str:
+        """Alle Befehle in eine Nachricht — solange sie hineinpassen.
+
+        Die flache Liste ist die bessere Antwort: Wer !help tippt, will sehen
+        was es gibt, nicht erst ein Menue durchklicken. Sie waechst aber mit
+        jedem Befehl. Passt sie nicht mehr, faellt die Antwort automatisch auf
+        die Gruppennamen zurueck, statt am Zeichenlimit abgeschnitten zu werden.
+        """
+        alle = [c for gruppe in self.GRUPPEN.values() for c in gruppe]
+        flach = " ".join("!" + c for c in alle) + " | !help <cmd>"
+        if len(flach) <= self.settings.max_msg_len:
+            return flach
+        return ("Themen: " + " ".join("!help " + g for g in self.GRUPPEN)
+                + " — oder !help <befehl>")
 
     # --- Infrastruktur ---------------------------------------------------
 

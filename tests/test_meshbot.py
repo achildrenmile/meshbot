@@ -19,6 +19,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from meshbot.config import Settings  # noqa: E402
 from meshbot.formatting import clamp, prepare, transliterate  # noqa: E402
 from meshbot.handlers import lawine as h_lawine  # noqa: E402
+from meshbot.handlers import melde as h_melde  # noqa: E402
+from meshbot.handlers import qth as h_qth  # noqa: E402
+from meshbot.handlers import wo as h_wo  # noqa: E402
 from meshbot.handlers import netz as h_netz  # noqa: E402
 from meshbot.handlers import relais as h_relais  # noqa: E402
 from meshbot.handlers import sonne as h_sonne  # noqa: E402
@@ -496,3 +499,95 @@ def test_hilfe_passt_in_eine_nachricht():
     assert len(run(bot.cmd_help("", "x"))) <= 140
     for cmd in bot.HILFE:
         assert len(run(bot.cmd_help(cmd, "x"))) <= 140, f"Hilfe zu {cmd} zu lang"
+
+
+# --- QTH: Locator hin und zurueck ----------------------------------------
+
+@pytest.mark.parametrize("lat,lon,loc", [
+    (46.6031, 13.6712, "JN66"),       # Dobratsch
+    (48.2082, 16.3738, "JN88"),       # Wien
+    (0.0, 0.0, "JJ00"),
+])
+def test_qth_koordinaten_zu_locator(lat, lon, loc):
+    assert h_qth.to_locator(lat, lon).startswith(loc)
+
+
+def test_qth_hin_und_zurueck_bleibt_nah():
+    """Ein Locatorfeld ist rund 5 x 4 km gross — mehr Genauigkeit gibt es nicht."""
+    for lat, lon in [(46.6031, 13.6712), (47.0744, 12.6942), (46.9375, 14.5416)]:
+        zurueck = h_qth.from_locator(h_qth.to_locator(lat, lon))
+        assert zurueck is not None
+        assert abs(zurueck[0] - lat) < 0.05 and abs(zurueck[1] - lon) < 0.09
+
+
+@pytest.mark.parametrize("loc", ["ZZ99xx", "J66", "", "hallo", "1N66uo"])
+def test_qth_ungueltige_locator(loc):
+    assert h_qth.from_locator(loc) is None
+
+
+# --- Wo: Knotensuche ------------------------------------------------------
+
+def _nodes():
+    return [
+        {"name": "AT-VI-Dobratsch", "lat": 46.6031, "lon": 13.6712, "relay_count_24h": 1803,
+         "last_seen": "2026-08-16T12:00:00Z"},
+        {"name": "AT-VL-GoeriacherAlm", "lat": 46.5461, "lon": 13.5975, "relay_count_24h": 3608,
+         "last_seen": "2026-08-16T17:00:00Z"},
+    ]
+
+
+@pytest.mark.parametrize("begriff,erwartet", [
+    ("dobratsch", "AT-VI-Dobratsch"),
+    ("DOBRA", "AT-VI-Dobratsch"),
+    ("goeriacher", "AT-VL-GoeriacherAlm"),
+    ("dobratsh", "AT-VI-Dobratsch"),      # Tippfehler
+])
+def test_wo_findet_knoten(begriff, erwartet):
+    n = h_wo.suche(_nodes(), begriff)
+    assert n is not None and n["name"] == erwartet
+
+
+def test_wo_unbekannt():
+    assert h_wo.suche(_nodes(), "zzzzz") is None
+
+
+def test_wo_render():
+    from datetime import datetime, timezone
+    jetzt = datetime(2026, 8, 16, 17, 30, tzinfo=timezone.utc)
+    text = h_wo.render("dobratsch", _nodes()[0], jetzt)
+    assert "AT-VI-Dobratsch" in text and "1803/24h" in text and len(text) <= 140
+
+
+# --- Melde: Meldungen aus dem Funknetz ------------------------------------
+
+def test_melde_zieht_position_heraus():
+    from datetime import datetime, timezone
+    m = h_melde.erfassen("kein Empfang in Kellerberg 46.6749 13.7083", "OE8X",
+                         datetime(2026, 8, 16, tzinfo=timezone.utc))
+    assert m["lat"] == 46.6749 and m["lon"] == 13.7083 and m["von"] == "OE8X"
+
+
+def test_melde_ohne_position():
+    from datetime import datetime, timezone
+    m = h_melde.erfassen("Repeater Nötsch antwortet nicht", "OE8X",
+                         datetime(2026, 8, 16, tzinfo=timezone.utc))
+    assert m["lat"] is None and "Nötsch" in m["text"]
+
+
+def test_melde_haengt_an_und_zaehlt(tmp_path):
+    """Meldungen duerfen nie verloren gehen — angehaengt, nie ueberschrieben."""
+    from datetime import datetime, timezone
+    pfad = tmp_path / "unterordner" / "meldungen.jsonl"
+    jetzt = datetime(2026, 8, 16, tzinfo=timezone.utc)
+    for i in range(3):
+        nr = h_melde.speichern(h_melde.erfassen(f"Meldung {i}", "OE8X", jetzt), pfad)
+    assert nr == 3
+    assert len(h_melde.letzte(pfad, 5)) == 3
+    assert h_melde.letzte(pfad, 1)[0]["text"] == "Meldung 2"
+
+
+def test_melde_bestaetigung_nennt_die_nummer():
+    from datetime import datetime, timezone
+    m = h_melde.erfassen("Luecke 46.60 13.67", "OE8X", datetime.now(timezone.utc))
+    text = h_melde.render(m, 7)
+    assert "#7" in text and "46.6000" in text and len(text) <= 140

@@ -4,3 +4,4 @@ pydantic==2.11.7
 pydantic-settings==2.10.1
 cachetools==5.5.2
 structlog==25.4.0
+sgp4==2.24

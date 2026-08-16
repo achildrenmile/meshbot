@@ -30,11 +30,20 @@ weiterer TCP-Client am Node — davon verträgt ein Companion nur zwei.
 | `!sota <ref>` | `!summit` | `OE/KT-048 Rinsennock 2334m, 10Pkt` |
 | `!sota <lat> <lon>` | | `OE/KT-072 Villacher Alpe 2166m 8Pkt (88m NW) \| …` |
 | `!relais <band> [ort]` | `!rpt` | `2m b. Villach: OE8XNK Gerlitzen 145.7625 -0.6 (10km) \| …` |
+| `!vorhersage <ort>` | `!morgen`, `!fc` | `24h Villach: 18 bis 26C, 11mm Regen, Boeen 38km/h` |
+| `!lawine` | `!avalanche` | `Lawine KTN: Stufe 3 erheblich (ab Waldgrenze)` |
+| `!spot [assoc]` | `!spots` | `OE8XXX OE/KT-048 14.062 CW 12min` |
+| `!sonne [ort\|lat lon]` | `!sun` | `Sonne: auf 06:04, unter 20:15, dunkel 20:48 (noch 1h03)` |
+| `!netz` | `!status` | `Netz KTN: 32/33 Repeater aktiv, 31729 Weiterleitungen/24h` |
+| `!zeit` | `!time`, `!utc` | `UTC 16.08.2026 17:11:53 (Epoch 1786900313)` |
 | `!ping` | | `MeshBot OK, up 3d4h, 42 cmds` |
-| `!help` | `!hilfe` | Einzeiler mit allen Befehlen |
+| `!help [cmd]` | `!hilfe` | Übersicht, mit Befehl die Einzelheiten |
 
 Ohne Ort nimmt `!wx` und `!relais` den Standardort aus der Konfiguration.
 Tippfehler werden toleriert (`!wx vilach` findet Villach).
+
+**Zweistufige Hilfe:** `!help` listet die Befehle, `!help sota` erklärt einen davon.
+Bei elf Befehlen passt beides nicht mehr in eine Zeile.
 
 **Gipfel per Position:** Am Berg kennt man die Referenz selten, das Gerät aber die
 Koordinaten. `!sota 46.60 13.67` liefert die nächstgelegenen Gipfel mit Entfernung
@@ -63,6 +72,11 @@ Zoomfaktor in einem Kartenlink stören nicht.
 | `!sota` per Referenz | SOTA API v2 | |
 | `!sota` per Position | 1780 Gipfel aus OE/KT, ST, TI, SB, OO im Repo | lokal, ohne Netz, dient auch als Rückfall |
 | `!relais` | RelaisBlick (oeradio.at), als JSON im Repo | funktioniert ohne Internet |
+| `!vorhersage` | GeoSphere, Modell `nwp-v1-1h-2500m` | punktgenau über Koordinaten |
+| `!lawine` | EAWS-Bulletin, Region `AT-02` | nur in der Saison |
+| `!spot` | SOTAwatch über die SOTA-API | Vorgabe: nur OE |
+| `!netz` | Karten-API von map.carinthiamesh.com | |
+| `!sonne`, `!zeit` | gerechnet, keine Quelle | funktioniert ohne Internet |
 
 Zwischenspeicher: Wetter 10 min, Warnungen 5 min, SOTA und Relais 24 h. Fällt eine
 Quelle aus, kommt der letzte bekannte Wert mit `~` davor — lieber ein alter Wert
@@ -137,7 +151,7 @@ python -m venv .venv && .venv/bin/pip install -r requirements.txt pytest
 .venv/bin/python -m pytest tests -q
 ```
 
-48 Tests. Der wichtigste prüft als Eigenschaft über alle Handler: **keine Antwort
+83 Tests. Der wichtigste prüft als Eigenschaft über alle Handler: **keine Antwort
 überschreitet je die Zeichengrenze.**
 
 ## Was der Bot nicht tut

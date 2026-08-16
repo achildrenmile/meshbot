@@ -62,12 +62,21 @@ class Settings(BaseSettings):
     cache_ttl_uwz_s: int = 300
     cache_ttl_sota_s: int = 86400
     cache_ttl_relais_s: int = 86400
+    cache_ttl_spot_s: int = 120
+    cache_ttl_lawine_s: int = 3600
+    cache_ttl_forecast_s: int = 1800
+    cache_ttl_netz_s: int = 600
 
     geosphere_tawes_url: str = (
         "https://dataset.api.hub.geosphere.at/v1/station/current/tawes-v1-10min"
     )
     warn_url: str = "https://warnungen.zamg.at/wsapp/api/getWarningsForCoords"
     sota_url: str = "https://api2.sota.org.uk/api/summits"
+    sota_spots_url: str = "https://api2.sota.org.uk/api/spots"
+    lawine_region: str = "AT-02"
+    forecast_url: str = "https://dataset.api.hub.geosphere.at/v1/timeseries/forecast/nwp-v1-1h-2500m"
+    map_url: str = "https://map.carinthiamesh.com"
+    tz_offset_h: int = 2
 
     health_port: int = 8080
     log_level: str = "INFO"

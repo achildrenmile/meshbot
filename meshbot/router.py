@@ -37,6 +37,12 @@ ALIASES = {
     "relais": "relais", "rpt": "relais",
     "ping": "ping",
     "help": "help", "hilfe": "help",
+    "sonne": "sonne", "sun": "sonne",
+    "spot": "spot", "spots": "spot",
+    "lawine": "lawine", "avalanche": "lawine",
+    "netz": "netz", "status": "netz",
+    "vorhersage": "vorhersage", "morgen": "vorhersage", "fc": "vorhersage",
+    "zeit": "zeit", "time": "zeit", "utc": "zeit",
 }
 
 

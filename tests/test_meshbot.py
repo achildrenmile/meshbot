@@ -18,7 +18,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from meshbot.config import Settings  # noqa: E402
 from meshbot.formatting import clamp, prepare, transliterate  # noqa: E402
+from meshbot.handlers import lawine as h_lawine  # noqa: E402
+from meshbot.handlers import netz as h_netz  # noqa: E402
 from meshbot.handlers import relais as h_relais  # noqa: E402
+from meshbot.handlers import sonne as h_sonne  # noqa: E402
+from meshbot.handlers import spot as h_spot  # noqa: E402
+from meshbot.handlers import vorhersage as h_fc  # noqa: E402
 from meshbot.handlers import sota as h_sota  # noqa: E402
 from meshbot.handlers import uwz as h_uwz  # noqa: E402
 from meshbot.handlers import wx as h_wx  # noqa: E402
@@ -337,3 +342,103 @@ def test_echte_stationsdaten_ladbar():
 ])
 def test_keine_antwort_ueberschreitet_das_limit(roh):
     assert len(prepare(roh, 140, True)) <= 140
+
+
+# --- Sonne: gegen unabhaengig gerechnete Werte -----------------------------
+
+def test_sonne_villach_gegen_referenz():
+    """Referenz sunrise-sunset.org fuer Villach am 16.08.2026 (UTC):
+    Aufgang 04:02, Untergang 18:15, Daemmerungsende 18:46.
+    Die vereinfachte Sonnenstandsgleichung darf zwei Minuten danebenliegen."""
+    from datetime import datetime, timezone
+    jetzt = datetime(2026, 8, 16, 12, 0, tzinfo=timezone.utc)
+    w = h_sonne.berechne(46.6103, 13.8558, jetzt)
+    soll = {"aufgang": (4, 2), "untergang": (18, 15), "daemmerung": (18, 46)}
+    for name, (h, m) in soll.items():
+        ist = w[name]
+        assert ist is not None
+        abweichung = abs((ist.hour * 60 + ist.minute) - (h * 60 + m))
+        assert abweichung <= 3, f"{name}: {ist:%H:%M} statt {h:02d}:{m:02d}"
+
+
+def test_sonne_polarnacht_liefert_none():
+    from datetime import datetime, timezone
+    w = h_sonne.berechne(80.0, 15.0, datetime(2026, 12, 21, 12, 0, tzinfo=timezone.utc))
+    assert w["aufgang"] is None and w["untergang"] is None
+
+
+def test_sonne_render_kurz_genug():
+    from datetime import datetime, timezone
+    jetzt = datetime(2026, 8, 16, 12, 0, tzinfo=timezone.utc)
+    text = h_sonne.render(h_sonne.berechne(46.61, 13.86, jetzt), jetzt)
+    assert text.startswith("Sonne:") and len(text) <= 140
+
+
+# --- Spots ---------------------------------------------------------------
+
+def test_spot_filtert_fremde_assoziationen():
+    spots = [{"associationCode": "OE", "summitCode": "KT-048", "activatorCallsign": "OE8X",
+              "frequency": "14.062", "mode": "CW", "timeStamp": "2026-08-16T17:00:00Z"},
+             {"associationCode": "W7", "summitCode": "CM-063", "activatorCallsign": "W7A",
+              "frequency": "146.58", "mode": "FM", "timeStamp": "2026-08-16T17:00:00Z"}]
+    assert len(h_spot.filtern(spots, "OE")) == 1
+
+
+def test_spot_render_mit_alter():
+    from datetime import datetime, timezone
+    jetzt = datetime(2026, 8, 16, 17, 30, tzinfo=timezone.utc)
+    spots = [{"associationCode": "OE", "summitCode": "KT-048", "activatorCallsign": "OE8X",
+              "frequency": "14.062", "mode": "CW", "timeStamp": "2026-08-16T17:12:00Z"}]
+    text = h_spot.render(spots, jetzt)
+    assert "OE8X" in text and "18min" in text and len(text) <= 140
+
+
+def test_spot_leer():
+    from datetime import datetime, timezone
+    assert "niemand" in h_spot.render([], datetime.now(timezone.utc))
+
+
+# --- Lawine --------------------------------------------------------------
+
+def test_lawine_ausserhalb_der_saison():
+    assert "kein Bulletin" in h_lawine.render(None)
+    assert "kein Bulletin" in h_lawine.render([])
+
+
+def test_lawine_nimmt_die_hoechste_stufe():
+    bulletins = [{"dangerRatings": [{"mainValue": "moderate", "elevation": {"upperBound": "treeline"}},
+                                    {"mainValue": "considerable", "elevation": {"lowerBound": "treeline"}}]}]
+    text = h_lawine.render(bulletins)
+    assert "3 erheblich" in text and "ab Waldgrenze" in text and len(text) <= 140
+
+
+def test_lawine_url_pattern():
+    from datetime import date
+    assert h_lawine.url_fuer(date(2026, 2, 1)).endswith("2026-02-01/2026-02-01-AT-02.json")
+
+
+# --- Netz ----------------------------------------------------------------
+
+def test_netz_erkennt_kaerntner_knoten():
+    assert h_netz.ist_kaernten("AT-VL-Noetsch", 46.58, 13.62)
+    assert not h_netz.ist_kaernten("AT-ST-Graz", 47.06, 15.41)      # falscher Bezirk
+    assert not h_netz.ist_kaernten("AT-KO-Wien", 48.3, 16.3)        # K-Praefix, aber Niederoesterreich
+    assert not h_netz.ist_kaernten("SI-Golica", 46.49, 14.06)
+
+
+def test_netz_render():
+    text = h_netz.render({"repeater": 32, "gesamt": 33, "weiterleitungen": 28000,
+                          "top": ("AT-WO-St.Ulrich", 3749)})
+    assert "32/33" in text and len(text) <= 140
+
+
+# --- Vorhersage ----------------------------------------------------------
+
+def test_vorhersage_render():
+    text = h_fc.render("villach", {"tmin": 18.2, "tmax": 26.4, "regen": 11.0, "boe": 10.5, "stunden": 24})
+    assert "18 bis 26C" in text and "11mm" in text and len(text) <= 140
+
+
+def test_vorhersage_kein_regen():
+    text = h_fc.render("villach", {"tmin": 12.0, "tmax": 20.0, "regen": 0.05, "boe": 3.0, "stunden": 24})
+    assert "kein Regen" in text

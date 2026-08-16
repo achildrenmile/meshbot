@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import signal
+from datetime import datetime, timezone
 from typing import Any
 
 import httpx
@@ -12,7 +13,12 @@ import structlog
 from cachetools import TTLCache
 
 from .config import Settings, load_settings
+from .handlers import lawine as h_lawine
+from .handlers import netz as h_netz
 from .handlers import relais as h_relais
+from .handlers import sonne as h_sonne
+from .handlers import spot as h_spot
+from .handlers import vorhersage as h_fc
 from .handlers import sota as h_sota
 from .handlers import uwz as h_uwz
 from .handlers import wx as h_wx
@@ -33,10 +39,16 @@ class Bot:
         self.cache_wx: TTLCache = TTLCache(maxsize=64, ttl=settings.cache_ttl_wx_s)
         self.cache_uwz: TTLCache = TTLCache(maxsize=4, ttl=settings.cache_ttl_uwz_s)
         self.cache_sota: TTLCache = TTLCache(maxsize=256, ttl=settings.cache_ttl_sota_s)
+        self.cache_spot: TTLCache = TTLCache(maxsize=4, ttl=settings.cache_ttl_spot_s)
+        self.cache_lawine: TTLCache = TTLCache(maxsize=4, ttl=settings.cache_ttl_lawine_s)
+        self.cache_fc: TTLCache = TTLCache(maxsize=32, ttl=settings.cache_ttl_forecast_s)
+        self.cache_netz: TTLCache = TTLCache(maxsize=2, ttl=settings.cache_ttl_netz_s)
         self.stale: dict[str, Any] = {}          # letzte gute Antwort je Schlüssel
         self.router = Router(settings, {
             "wx": self.cmd_wx, "uwz": self.cmd_uwz, "sota": self.cmd_sota,
             "relais": self.cmd_relais, "ping": self.cmd_ping, "help": self.cmd_help,
+            "sonne": self.cmd_sonne, "spot": self.cmd_spot, "lawine": self.cmd_lawine,
+            "netz": self.cmd_netz, "vorhersage": self.cmd_vorhersage, "zeit": self.cmd_zeit,
         })
         self.mqtt = MqttClient(settings, on_message=self.on_message, on_admin=self.on_admin)
 
@@ -112,11 +124,102 @@ class Bot:
         gefunden = h_relais.suche(self.relais, band, koord["lat"], koord["lon"])
         return h_relais.render(band, ort, gefunden)
 
+    async def cmd_sonne(self, arg: str, sender: str) -> str:
+        koord = h_sota.parse_coords(arg)
+        if koord is None:                       # ohne Position: Standardort
+            treffer = h_wx.resolve_place(arg, self.stations, self.settings.default_location)
+            koord = (treffer[1]["lat"], treffer[1]["lon"]) if treffer else (46.61, 13.86)
+        jetzt = datetime.now(timezone.utc)
+        return h_sonne.render(h_sonne.berechne(*koord, jetzt), jetzt, self.settings.tz_offset_h)
+
+    async def cmd_spot(self, arg: str, sender: str) -> str | None:
+        assoc = (arg.strip() or "OE").upper()
+        jetzt = datetime.now(timezone.utc)
+        if assoc in self.cache_spot:
+            return h_spot.render(self.cache_spot[assoc], jetzt, assoc)
+        try:
+            alle = await self._mit_retry(h_spot.fetch, self.settings.sota_spots_url)
+        except Exception:
+            alt = self.stale.get(f"spot:{assoc}")
+            return h_spot.render(alt, jetzt, assoc) if alt else "SOTA: Quelle nicht erreichbar"
+        spots = h_spot.filtern(alle, assoc)
+        self.cache_spot[assoc] = spots
+        self.stale[f"spot:{assoc}"] = spots
+        return h_spot.render(spots, jetzt, assoc)
+
+    async def cmd_lawine(self, arg: str, sender: str) -> str | None:
+        heute = datetime.now(timezone.utc).date()
+        if "heute" in self.cache_lawine:
+            return h_lawine.render(self.cache_lawine["heute"])
+        try:
+            bulletins = await self._mit_retry(h_lawine.fetch, heute, self.settings.lawine_region)
+        except Exception:
+            alt = self.stale.get("lawine")
+            return h_lawine.render(alt) if alt else "Lawine: Quelle nicht erreichbar"
+        self.cache_lawine["heute"] = bulletins
+        if bulletins:
+            self.stale["lawine"] = bulletins
+        return h_lawine.render(bulletins)
+
+    async def cmd_netz(self, arg: str, sender: str) -> str | None:
+        if "aktuell" in self.cache_netz:
+            return h_netz.render(self.cache_netz["aktuell"])
+        try:
+            werte = await self._mit_retry(h_netz.fetch, self.settings.map_url)
+        except Exception:
+            alt = self.stale.get("netz")
+            return h_netz.render(alt, stale=True) if alt else "Netz: Karte nicht erreichbar"
+        self.cache_netz["aktuell"] = werte
+        self.stale["netz"] = werte
+        return h_netz.render(werte)
+
+    async def cmd_vorhersage(self, arg: str, sender: str) -> str | None:
+        koord = h_sota.parse_coords(arg)
+        ort = "hier"
+        if koord is None:
+            treffer = h_wx.resolve_place(arg, self.stations, self.settings.default_location)
+            if treffer is None:
+                return f"Vorhersage: {arg[:16]} unbekannt"
+            ort, station = treffer
+            koord = (station["lat"], station["lon"])
+        schluessel = f"{koord[0]:.2f},{koord[1]:.2f}"
+        if schluessel in self.cache_fc:
+            return h_fc.render(ort, self.cache_fc[schluessel])
+        try:
+            werte = await self._mit_retry(h_fc.fetch, self.settings.forecast_url, *koord)
+        except Exception:
+            alt = self.stale.get(f"fc:{schluessel}")
+            return h_fc.render(ort, alt, stale=True) if alt else "Vorhersage: Quelle nicht erreichbar"
+        self.cache_fc[schluessel] = werte
+        self.stale[f"fc:{schluessel}"] = werte
+        return h_fc.render(ort, werte)
+
+    async def cmd_zeit(self, arg: str, sender: str) -> str:
+        jetzt = datetime.now(timezone.utc)
+        return f"UTC {jetzt:%d.%m.%Y %H:%M:%S} (Epoch {int(jetzt.timestamp())})"
+
     async def cmd_ping(self, arg: str, sender: str) -> str:
         return f"{self.settings.bot_name} OK, up {self.router.uptime()}, {self.router.served} cmds"
 
+    HILFE = {
+        "wx": "!wx <ort> aktuelles Wetter. !vorhersage <ort> naechste 24h",
+        "uwz": "!uwz amtliche Warnungen fuer Kaernten",
+        "sota": "!sota <ref> Gipfeldaten. !sota <lat lon> naechster Gipfel. !spot wer ist QRV",
+        "spot": "!spot [assoc] wer gerade auf einem Gipfel funkt, Vorgabe OE",
+        "relais": "!relais <2m|70cm|23cm> [ort] naechste Relais",
+        "sonne": "!sonne [ort|lat lon] Auf-, Untergang, Daemmerung",
+        "lawine": "!lawine Lawinenwarnstufe Kaernten (nur in der Saison)",
+        "netz": "!netz Zustand des Mesh: aktive Repeater und Verkehr",
+        "zeit": "!zeit UTC und Epoch-Sekunden, fuer Uhren am Node",
+    }
+
     async def cmd_help(self, arg: str, sender: str) -> str:
-        return "Cmds: !wx <ort> !uwz !sota <ref|lat lon> !relais <band> [ort] !ping"
+        """Zweistufig, weil eine Zeile fuer zehn Befehle nicht reicht."""
+        thema = arg.strip().lstrip("!").lower()
+        if thema in self.HILFE:
+            return self.HILFE[thema]
+        return ("Cmds: !wx !vorhersage !uwz !lawine !sota !spot !relais !sonne !netz !zeit "
+                "!ping. Details: !help <cmd>")
 
     # --- Infrastruktur ---------------------------------------------------
 

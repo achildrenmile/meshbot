@@ -1,0 +1,6 @@
+paho-mqtt==2.1.0
+httpx==0.28.1
+pydantic==2.11.7
+pydantic-settings==2.10.1
+cachetools==5.5.2
+structlog==25.4.0

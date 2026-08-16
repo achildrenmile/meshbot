@@ -1,0 +1,21 @@
+name: meshbot
+
+# Ein Dienst, kein Traefik: Der Bot spricht nur MQTT, nichts davon geht ins Web.
+# Der Healthcheck bleibt containerintern.
+#
+# Kein eigenes Netz: Der Broker laeuft auf einem anderen Host, erreicht wird er
+# ueber das LAN. Wer den Bot neben den Broker stellt, kann stattdessen dessen
+# Compose-Netz einhaengen.
+
+services:
+  meshbot:
+    build: .
+    image: meshbot:local
+    container_name: meshbot
+    restart: unless-stopped
+    env_file: .env
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

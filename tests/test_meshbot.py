@@ -327,9 +327,33 @@ def test_echte_relaisdaten_ladbar():
 
 def test_echte_stationsdaten_ladbar():
     s = Settings(mqtt_host="test")
-    stationen = h_wx.load_stations(s)
-    assert "villach" in stationen and "klagenfurt" in stationen
-    assert all("station_id" in v for v in stationen.values())
+    daten = h_wx.load_stations(s)
+    assert "villach" in daten["orte"] and "klagenfurt" in daten["orte"]
+    assert all("station_id" in v for v in daten["orte"].values())
+    assert len(daten["stationen"]) > 20
+    assert all({"id", "name", "lat", "lon"} <= set(s) for s in daten["stationen"])
+
+
+@pytest.mark.parametrize("arg,erwartet_teil", [
+    ("villach", "villach"),
+    ("46.6031 13.6712", "Villacher Alpe"),      # Position auf dem Berg -> Bergstation
+    ("geo:46.79,13.50", "Spittal"),
+    ("46,6247, 14,3053", "Klagenfurt"),
+])
+def test_ort_oder_position(arg, erwartet_teil):
+    """Ortsname und Koordinaten fuehren beide zu einer Station."""
+    s = Settings(mqtt_host="test")
+    treffer = h_wx.resolve_place(arg, h_wx.load_stations(s), "villach")
+    assert treffer is not None and erwartet_teil.lower() in treffer[0].lower()
+
+
+def test_position_nennt_die_station():
+    """Bei Koordinaten muss der Stationsname in der Antwort stehen — sonst weiss
+    niemand, woher die Werte kommen."""
+    s = Settings(mqtt_host="test")
+    ort, station = h_wx.resolve_place("46.94 14.56", h_wx.load_stations(s), "villach")
+    text = h_wx.render(ort, {"TL": 20.0})
+    assert station["station"].split()[0][:5].lower() in text.lower()
 
 
 # --- Eigenschaft ueber alles ---------------------------------------------
@@ -442,3 +466,33 @@ def test_vorhersage_render():
 def test_vorhersage_kein_regen():
     text = h_fc.render("villach", {"tmin": 12.0, "tmax": 20.0, "regen": 0.05, "boe": 3.0, "stunden": 24})
     assert "kein Regen" in text
+
+
+# --- Hilfe: darf nie hinter den Befehlen zurueckbleiben -------------------
+
+def _bot():
+    from meshbot.main import Bot
+    return Bot(Settings(mqtt_host="test"))
+
+
+def test_jeder_befehl_hat_eine_einzelhilfe():
+    """Neuer Befehl ohne Hilfetext ist ein Fehler, kein Schoenheitsfehler."""
+    bot = _bot()
+    fehlend = [c for c in bot.router.handlers if c not in bot.HILFE]
+    assert not fehlend, f"ohne Hilfe: {fehlend}"
+
+
+def test_uebersicht_nennt_jeden_befehl():
+    from meshbot.router import ALIASES
+    bot = _bot()
+    text = run(bot.cmd_help("", "x"))
+    for cmd in bot.router.handlers:
+        namen = [a for a, ziel in ALIASES.items() if ziel == cmd]
+        assert any(f"!{n}" in text for n in namen), f"{cmd} fehlt in der Uebersicht"
+
+
+def test_hilfe_passt_in_eine_nachricht():
+    bot = _bot()
+    assert len(run(bot.cmd_help("", "x"))) <= 140
+    for cmd in bot.HILFE:
+        assert len(run(bot.cmd_help(cmd, "x"))) <= 140, f"Hilfe zu {cmd} zu lang"

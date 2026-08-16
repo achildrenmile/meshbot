@@ -8,12 +8,14 @@ und wurde aus der Stationsliste der GeoSphere erzeugt (nächstgelegene Station).
 from __future__ import annotations
 
 import json
+import math
 from difflib import get_close_matches
 from typing import Any
 
 import httpx
 
 from ..config import Settings
+from .sota import parse_coords
 
 PARAMS = "TL,RF,FFAM,DD,P"          # Temperatur, Feuchte, Wind, Richtung, Druck
 HIMMELSRICHTUNG = ["N", "NO", "O", "SO", "S", "SW", "W", "NW"]
@@ -25,20 +27,61 @@ def _richtung(grad: float | None) -> str:
     return HIMMELSRICHTUNG[int((grad % 360) / 45 + 0.5) % 8]
 
 
-def load_stations(settings: Settings) -> dict[str, dict[str, Any]]:
+def load_stations(settings: Settings) -> dict[str, Any]:
+    """Ortszuordnung und vollstaendige Stationsliste.
+
+    Die Ortszuordnung deckt die gaengigen Namen ab, die Stationsliste erlaubt
+    die Suche ueber Koordinaten — am Berg tippt niemand einen Ortsnamen, aber
+    das Geraet kennt die Position.
+    """
     with open(settings.stations_file, encoding="utf-8") as fh:
-        return json.load(fh)
+        daten = json.load(fh)
+    if "orte" not in daten:            # altes Format ohne Stationsliste
+        return {"orte": daten, "stationen": []}
+    return daten
 
 
-def resolve_place(arg: str, stations: dict[str, dict[str, Any]], default: str) -> tuple[str, dict[str, Any]] | None:
-    """Ort auf eine Station abbilden, mit Tippfehler-Toleranz."""
+def distanz_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    r = 6371.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dp = p2 - p1
+    dl = math.radians(lon2 - lon1)
+    a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    return 2 * r * math.asin(math.sqrt(a))
+
+
+def station_bei(stationen: list[dict[str, Any]], lat: float, lon: float) -> dict[str, Any] | None:
+    """Naechstgelegene Wetterstation zu einer Position."""
+    if not stationen:
+        return None
+    return min(stationen, key=lambda s: distanz_km(lat, lon, s["lat"], s["lon"]))
+
+
+def resolve_place(arg: str, stations: dict[str, Any], default: str) -> tuple[str, dict[str, Any]] | None:
+    """Ort oder Position auf eine Station abbilden.
+
+    Akzeptiert einen Ortsnamen (mit Tippfehler-Toleranz) oder Koordinaten in
+    beliebiger Schreibweise. Bei Koordinaten wird die naechstgelegene Station
+    genommen und ihr Name zurueckgegeben — damit sieht der Empfaenger, woher
+    die Werte stammen.
+    """
+    orte = stations.get("orte", stations)
+
+    koord = parse_coords(arg)
+    if koord is not None:
+        s = station_bei(stations.get("stationen", []), *koord)
+        if s is not None:
+            return s["name"], {"station_id": s["id"], "station": s["name"],
+                               "lat": s["lat"], "lon": s["lon"]}
+        return None
+
     key = " ".join(arg.split()).lower().strip() or default
     key = key.replace("ö", "oe").replace("ä", "ae").replace("ü", "ue").replace("ß", "ss")
-    if key in stations:
-        return key, stations[key]
-    treffer = get_close_matches(key, list(stations), n=1, cutoff=0.6)
+    if key in orte:
+        return key, orte[key]
+    treffer = get_close_matches(key, list(orte), n=1, cutoff=0.6)
     if treffer:
-        return treffer[0], stations[treffer[0]]
+        return treffer[0], orte[treffer[0]]
     return None
 
 

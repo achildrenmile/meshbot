@@ -1,106 +1,348 @@
 {
+ "orte": {
   "villach": {
-    "station_id": "11213",
-    "station": "Villach",
-    "lat": 46.6103,
-    "lon": 13.8558,
-    "hoehe": 493.0
+   "station_id": "11213",
+   "station": "Villach",
+   "lat": 46.6103,
+   "lon": 13.8558,
+   "hoehe": 493.0
   },
   "klagenfurt": {
-    "station_id": "8989076",
-    "station": "Klagenfurt/Htl1-Lastenstrasse",
-    "lat": 46.6247,
-    "lon": 14.3053,
-    "hoehe": 441.0
+   "station_id": "8989076",
+   "station": "Klagenfurt",
+   "lat": 46.6247,
+   "lon": 14.3053,
+   "hoehe": 441.0
   },
   "spittal": {
-    "station_id": "11272",
-    "station": "Spittal/Drau",
-    "lat": 46.7956,
-    "lon": 13.4967,
-    "hoehe": 542.0
+   "station_id": "11272",
+   "station": "Spittal",
+   "lat": 46.7956,
+   "lon": 13.4967,
+   "hoehe": 542.0
   },
   "hermagor": {
-    "station_id": "11259",
-    "station": "Hermagor",
-    "lat": 46.6255,
-    "lon": 13.369,
-    "hoehe": 562.0
+   "station_id": "11259",
+   "station": "Hermagor",
+   "lat": 46.6255,
+   "lon": 13.369,
+   "hoehe": 562.0
   },
   "noetsch": {
-    "station_id": "11218",
-    "station": "Bad Bleiberg",
-    "lat": 46.5889,
-    "lon": 13.6208,
-    "hoehe": 909.0
+   "station_id": "11218",
+   "station": "Bad Bleiberg",
+   "lat": 46.5889,
+   "lon": 13.6208,
+   "hoehe": 909.0
   },
   "wolfsberg": {
-    "station_id": "11229",
-    "station": "St.Andrae I.L.",
-    "lat": 46.8406,
-    "lon": 14.8408,
-    "hoehe": 403.0
+   "station_id": "11229",
+   "station": "St.Andrae I.L.",
+   "lat": 46.8406,
+   "lon": 14.8408,
+   "hoehe": 403.0
   },
   "st veit": {
-    "station_id": "11237",
-    "station": "St.Veit/Glan",
-    "lat": 46.7667,
-    "lon": 14.3603,
-    "hoehe": 463.0
+   "station_id": "11237",
+   "station": "St.Veit",
+   "lat": 46.7667,
+   "lon": 14.3603,
+   "hoehe": 463.0
   },
   "feldkirchen": {
-    "station_id": "11227",
-    "station": "Feldkirchen",
-    "lat": 46.7228,
-    "lon": 14.0958,
-    "hoehe": 546.0
+   "station_id": "11227",
+   "station": "Feldkirchen",
+   "lat": 46.7228,
+   "lon": 14.0958,
+   "hoehe": 546.0
   },
   "voelkermarkt": {
-    "station_id": "11257",
-    "station": "Voelkermarkt-Goldbrunnhof",
-    "lat": 46.6631,
-    "lon": 14.6339,
-    "hoehe": 466.0
+   "station_id": "11257",
+   "station": "Voelkermarkt-Goldbrunnhof",
+   "lat": 46.6631,
+   "lon": 14.6339,
+   "hoehe": 466.0
   },
   "bad eisenkappel": {
-    "station_id": "11234",
-    "station": "Bad Eisenkappel",
-    "lat": 46.4842,
-    "lon": 14.5906,
-    "hoehe": 623.0
+   "station_id": "11234",
+   "station": "Bad Eisenkappel",
+   "lat": 46.4842,
+   "lon": 14.5906,
+   "hoehe": 623.0
   },
   "gailtal": {
-    "station_id": "11259",
-    "station": "Hermagor",
-    "lat": 46.6255,
-    "lon": 13.369,
-    "hoehe": 562.0
+   "station_id": "11259",
+   "station": "Hermagor",
+   "lat": 46.6255,
+   "lon": 13.369,
+   "hoehe": 562.0
   },
   "lavanttal": {
-    "station_id": "11229",
-    "station": "St.Andrae I.L.",
-    "lat": 46.8406,
-    "lon": 14.8408,
-    "hoehe": 403.0
+   "station_id": "11229",
+   "station": "St.Andrae I.L.",
+   "lat": 46.8406,
+   "lon": 14.8408,
+   "hoehe": 403.0
   },
   "millstatt": {
-    "station_id": "11215",
-    "station": "Millstatt",
-    "lat": 46.8047,
-    "lon": 13.5786,
-    "hoehe": 721.0
+   "station_id": "11215",
+   "station": "Millstatt",
+   "lat": 46.8047,
+   "lon": 13.5786,
+   "hoehe": 721.0
   },
   "seeboden": {
-    "station_id": "11272",
-    "station": "Spittal/Drau",
-    "lat": 46.8175,
-    "lon": 13.5089,
-    "hoehe": 542.0
+   "station_id": "11272",
+   "station": "Spittal",
+   "lat": 46.8175,
+   "lon": 13.5089,
+   "hoehe": 542.0
   },
   "kanzelhoehe": {
-    "station_id": "11216",
-    "station": "Kanzelhoehe",
-    "lat": 46.6772,
-    "lon": 13.9083
+   "station_id": "11216",
+   "station": "Kanzelhoehe",
+   "lat": 46.6772,
+   "lon": 13.9083
   }
+ },
+ "stationen": [
+  {
+   "id": "11275",
+   "name": "Arriach",
+   "lat": 46.72777777777778,
+   "lon": 13.8525,
+   "hoehe": 890.0
+  },
+  {
+   "id": "11218",
+   "name": "Bad Bleiberg",
+   "lat": 46.625277777777775,
+   "lon": 13.684444444444445,
+   "hoehe": 909.0
+  },
+  {
+   "id": "11234",
+   "name": "Bad Eisenkappel",
+   "lat": 46.49055555555556,
+   "lon": 14.593333333333334,
+   "hoehe": 623.0
+  },
+  {
+   "id": "11270",
+   "name": "Dellach Im Drautal",
+   "lat": 46.74194444444444,
+   "lon": 13.082777777777778,
+   "hoehe": 628.0
+  },
+  {
+   "id": "11206",
+   "name": "Doellach",
+   "lat": 46.95805555555556,
+   "lon": 12.9025,
+   "hoehe": 1071.0
+  },
+  {
+   "id": "11232",
+   "name": "Feistritz Ob Bleiburg",
+   "lat": 46.55888888888889,
+   "lon": 14.766666666666667,
+   "hoehe": 522.0
+  },
+  {
+   "id": "11227",
+   "name": "Feldkirchen",
+   "lat": 46.721944444444446,
+   "lon": 14.096944444444444,
+   "hoehe": 546.0
+  },
+  {
+   "id": "11235",
+   "name": "Ferlach",
+   "lat": 46.53111111111111,
+   "lon": 14.314166666666667,
+   "hoehe": 459.0
+  },
+  {
+   "id": "11222",
+   "name": "Flattnitz",
+   "lat": 46.94083333333333,
+   "lon": 14.036111111111111,
+   "hoehe": 1437.0
+  },
+  {
+   "id": "11226",
+   "name": "Fresach",
+   "lat": 46.71527777777778,
+   "lon": 13.685277777777777,
+   "hoehe": 683.0
+  },
+  {
+   "id": "11228",
+   "name": "Friesach",
+   "lat": 46.95861111111111,
+   "lon": 14.405833333333334,
+   "hoehe": 640.0
+  },
+  {
+   "id": "11273",
+   "name": "Gmuend",
+   "lat": 46.90277777777778,
+   "lon": 13.534166666666666,
+   "hoehe": 738.0
+  },
+  {
+   "id": "11259",
+   "name": "Hermagor",
+   "lat": 46.609722222222224,
+   "lon": 13.492222222222221,
+   "hoehe": 562.0
+  },
+  {
+   "id": "11216",
+   "name": "Kanzelhoehe",
+   "lat": 46.67722222222222,
+   "lon": 13.901944444444444,
+   "hoehe": 1520.0
+  },
+  {
+   "id": "11349",
+   "name": "Katschberg",
+   "lat": 47.06055555555555,
+   "lon": 13.614722222222222,
+   "hoehe": 1635.0
+  },
+  {
+   "id": "11331",
+   "name": "Klagenfurt-Flughafen (Automat)",
+   "lat": 46.64833333333333,
+   "lon": 14.318333333333333,
+   "hoehe": 450.0
+  },
+  {
+   "id": "8989076",
+   "name": "Klagenfurt",
+   "lat": 46.61944444444445,
+   "lon": 14.316666666666666,
+   "hoehe": 441.0
+  },
+  {
+   "id": "8989078",
+   "name": "Koelnbreinsperre",
+   "lat": 47.08305555555556,
+   "lon": 13.346111111111112,
+   "hoehe": 1916.0
+  },
+  {
+   "id": "11255",
+   "name": "Koetschach-Mauthen",
+   "lat": 46.67638888888889,
+   "lon": 12.998333333333333,
+   "hoehe": 705.0
+  },
+  {
+   "id": "11086",
+   "name": "Kornat",
+   "lat": 46.684999999999995,
+   "lon": 12.88888888888889,
+   "hoehe": 990.0
+  },
+  {
+   "id": "11217",
+   "name": "Loibl",
+   "lat": 46.443888888888885,
+   "lon": 14.249166666666666,
+   "hoehe": 1097.0
+  },
+  {
+   "id": "11260",
+   "name": "Mallnitz-Bad",
+   "lat": 46.99194444444444,
+   "lon": 13.166666666666666,
+   "hoehe": 1197.0
+  },
+  {
+   "id": "11215",
+   "name": "Millstatt",
+   "lat": 46.808055555555555,
+   "lon": 13.572777777777777,
+   "hoehe": 721.0
+  },
+  {
+   "id": "11262",
+   "name": "Obervellach",
+   "lat": 46.93527777777778,
+   "lon": 13.194444444444445,
+   "hoehe": 688.0
+  },
+  {
+   "id": "11278",
+   "name": "Poertschach",
+   "lat": 46.630833333333335,
+   "lon": 14.165277777777778,
+   "hoehe": 450.0
+  },
+  {
+   "id": "11214",
+   "name": "Preitenegg",
+   "lat": 46.93833333333333,
+   "lon": 14.920277777777779,
+   "hoehe": 1059.0
+  },
+  {
+   "id": "11272",
+   "name": "Spittal",
+   "lat": 46.79055555555556,
+   "lon": 13.487222222222222,
+   "hoehe": 542.0
+  },
+  {
+   "id": "11229",
+   "name": "St.Andrae I.L.",
+   "lat": 46.76416666666667,
+   "lon": 14.828055555555554,
+   "hoehe": 403.0
+  },
+  {
+   "id": "11237",
+   "name": "St.Veit",
+   "lat": 46.73916666666667,
+   "lon": 14.385555555555555,
+   "hoehe": 463.0
+  },
+  {
+   "id": "11213",
+   "name": "Villach",
+   "lat": 46.61805555555556,
+   "lon": 13.873888888888889,
+   "hoehe": 493.0
+  },
+  {
+   "id": "11265",
+   "name": "Villacher Alpe",
+   "lat": 46.603611111111114,
+   "lon": 13.672777777777776,
+   "hoehe": 2117.0
+  },
+  {
+   "id": "11257",
+   "name": "Voelkermarkt-Goldbrunnhof",
+   "lat": 46.670833333333334,
+   "lon": 14.639166666666666,
+   "hoehe": 466.0
+  },
+  {
+   "id": "11263",
+   "name": "Weissensee",
+   "lat": 46.71861111111111,
+   "lon": 13.285833333333333,
+   "hoehe": 949.0
+  },
+  {
+   "id": "11225",
+   "name": "Weitensfeld",
+   "lat": 46.84916666666667,
+   "lon": 14.190833333333334,
+   "hoehe": 704.0
+  }
+ ]
 }

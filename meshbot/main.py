@@ -117,11 +117,18 @@ class Bot:
         if band not in h_relais.BAENDER:
             return "Relais: Band 2m, 70cm oder 23cm"
         ort_arg = teile[1] if len(teile) > 1 else self.settings.default_location
+
+        # Bei einer Position braucht es keinen Ortsnamen — "hier" ist kuerzer
+        # und ehrlicher als der Name der naechsten Wetterstation.
+        koord = h_sota.parse_coords(ort_arg)
+        if koord is not None:
+            return h_relais.render(band, "hier", h_relais.suche(self.relais, band, *koord))
+
         treffer = h_wx.resolve_place(ort_arg, self.stations, self.settings.default_location)
         if treffer is None:
             return f"Relais: {ort_arg[:16]} unbekannt"
-        ort, koord = treffer
-        gefunden = h_relais.suche(self.relais, band, koord["lat"], koord["lon"])
+        ort, station = treffer
+        gefunden = h_relais.suche(self.relais, band, station["lat"], station["lon"])
         return h_relais.render(band, ort, gefunden)
 
     async def cmd_sonne(self, arg: str, sender: str) -> str:
@@ -202,15 +209,18 @@ class Bot:
         return f"{self.settings.bot_name} OK, up {self.router.uptime()}, {self.router.served} cmds"
 
     HILFE = {
-        "wx": "!wx <ort> aktuelles Wetter. !vorhersage <ort> naechste 24h",
+        "wx": "!wx <ort|lat lon> Wetter der naechsten Station. Tippfehler egal",
+        "vorhersage": "!vorhersage <ort|lat lon> Spanne, Regen und Boeen der naechsten 24h",
         "uwz": "!uwz amtliche Warnungen fuer Kaernten",
         "sota": "!sota <ref> Gipfeldaten. !sota <lat lon> naechster Gipfel. !spot wer ist QRV",
         "spot": "!spot [assoc] wer gerade auf einem Gipfel funkt, Vorgabe OE",
-        "relais": "!relais <2m|70cm|23cm> [ort] naechste Relais",
+        "relais": "!relais <2m|70cm|23cm> [ort|lat lon] naechste Relais",
         "sonne": "!sonne [ort|lat lon] Auf-, Untergang, Daemmerung",
         "lawine": "!lawine Lawinenwarnstufe Kaernten (nur in der Saison)",
         "netz": "!netz Zustand des Mesh: aktive Repeater und Verkehr",
         "zeit": "!zeit UTC und Epoch-Sekunden, fuer Uhren am Node",
+        "ping": "!ping Lebenszeichen des Bots, taugt auch als Reichweitentest",
+        "help": "!help zeigt alle Befehle, !help <cmd> die Einzelheiten",
     }
 
     async def cmd_help(self, arg: str, sender: str) -> str:
@@ -219,7 +229,7 @@ class Bot:
         if thema in self.HILFE:
             return self.HILFE[thema]
         return ("Cmds: !wx !vorhersage !uwz !lawine !sota !spot !relais !sonne !netz !zeit "
-                "!ping. Details: !help <cmd>")
+                "!ping. Ort immer auch als lat lon. Details: !help <cmd>")
 
     # --- Infrastruktur ---------------------------------------------------
 

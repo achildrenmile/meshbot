@@ -25,11 +25,11 @@ weiterer TCP-Client am Node — davon verträgt ein Companion nur zwei.
 
 | Befehl | Alias | Antwort |
 |---|---|---|
-| `!wx <ort>` | `!wetter` | `WX Villach: 31.8C, 30%, Wind 14km/h NW, 956hPa` |
+| `!wx <ort\|lat lon>` | `!wetter` | `WX Villach: 31.8C, 30%, Wind 14km/h NW, 956hPa` |
 | `!uwz` | `!warn` | `UWZ KTN: GELB Gewitter (Zentralraum bis 22:00) +1 weitere` |
 | `!sota <ref>` | `!summit` | `OE/KT-048 Rinsennock 2334m, 10Pkt` |
 | `!sota <lat> <lon>` | | `OE/KT-072 Villacher Alpe 2166m 8Pkt (88m NW) \| …` |
-| `!relais <band> [ort]` | `!rpt` | `2m b. Villach: OE8XNK Gerlitzen 145.7625 -0.6 (10km) \| …` |
+| `!relais <band> [ort\|lat lon]` | `!rpt` | `2m b. Villach: OE8XNK Gerlitzen 145.7625 -0.6 (10km) \| …` |
 | `!vorhersage <ort>` | `!morgen`, `!fc` | `24h Villach: 18 bis 26C, 11mm Regen, Boeen 38km/h` |
 | `!lawine` | `!avalanche` | `Lawine KTN: Stufe 3 erheblich (ab Waldgrenze)` |
 | `!spot [assoc]` | `!spots` | `OE8XXX OE/KT-048 14.062 CW 12min` |
@@ -41,6 +41,11 @@ weiterer TCP-Client am Node — davon verträgt ein Companion nur zwei.
 
 Ohne Ort nimmt `!wx` und `!relais` den Standardort aus der Konfiguration.
 Tippfehler werden toleriert (`!wx vilach` findet Villach).
+
+**Statt eines Ortsnamens geht überall auch eine Position** — `!wx 46.6031 13.6712`,
+`!relais 2m geo:46.79,13.50`, `!vorhersage 46,6247, 14,3053`. Bei `!wx` wird die
+nächstgelegene Wetterstation genommen und **ihr Name mit ausgegeben**, damit klar
+ist, woher die Werte stammen.
 
 **Zweistufige Hilfe:** `!help` listet die Befehle, `!help sota` erklärt einen davon.
 Bei elf Befehlen passt beides nicht mehr in eine Zeile.

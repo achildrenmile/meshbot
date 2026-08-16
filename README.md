@@ -28,6 +28,7 @@ weiterer TCP-Client am Node — davon verträgt ein Companion nur zwei.
 | `!wx <ort>` | `!wetter` | `WX Villach: 31.8C, 30%, Wind 14km/h NW, 956hPa` |
 | `!uwz` | `!warn` | `UWZ KTN: GELB Gewitter (Zentralraum bis 22:00) +1 weitere` |
 | `!sota <ref>` | `!summit` | `OE/KT-048 Rinsennock 2334m, 10Pkt` |
+| `!sota <lat> <lon>` | | `OE/KT-072 Villacher Alpe 2166m 8Pkt (88m NW) \| …` |
 | `!relais <band> [ort]` | `!rpt` | `2m b. Villach: OE8XNK Gerlitzen 145.7625 -0.6 (10km) \| …` |
 | `!ping` | | `MeshBot OK, up 3d4h, 42 cmds` |
 | `!help` | `!hilfe` | Einzeiler mit allen Befehlen |
@@ -35,13 +36,19 @@ weiterer TCP-Client am Node — davon verträgt ein Companion nur zwei.
 Ohne Ort nimmt `!wx` und `!relais` den Standardort aus der Konfiguration.
 Tippfehler werden toleriert (`!wx vilach` findet Villach).
 
+**Gipfel per Position:** Am Berg kennt man die Referenz selten, das Gerät aber die
+Koordinaten. `!sota 46.60 13.67` liefert die nächstgelegenen Gipfel mit Entfernung
+und Himmelsrichtung — über 25 km Entfernung kommt nichts, das wäre als
+Standortangabe wertlos.
+
 ## Datenquellen
 
 | Befehl | Quelle | Lizenz / Hinweis |
 |---|---|---|
 | `!wx` | GeoSphere Austria, Datensatz `tawes-v1-10min` | CC BY 4.0, kein Schlüssel nötig |
 | `!uwz` | GeoSphere Warn-API, `getWarningsForCoords` | vier Abfragepunkte decken Kärnten ab |
-| `!sota` | SOTA API v2 | |
+| `!sota` per Referenz | SOTA API v2 | |
+| `!sota` per Position | 1780 Gipfel aus OE/KT, ST, TI, SB, OO im Repo | lokal, ohne Netz, dient auch als Rückfall |
 | `!relais` | RelaisBlick (oeradio.at), als JSON im Repo | funktioniert ohne Internet |
 
 Zwischenspeicher: Wetter 10 min, Warnungen 5 min, SOTA und Relais 24 h. Fällt eine

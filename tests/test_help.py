@@ -37,15 +37,44 @@ def test_jeder_befehl_ist_ueber_einen_alias_erreichbar():
 
 def test_uebersicht_passt_in_eine_nachricht():
     b = bot()
-    assert len(run(b.cmd_help("", "x"))) <= b.settings.max_msg_len
+    assert len(run(b.cmd_help("", "x"))) <= b.settings.nutzlimit
+
+
+def test_uebersicht_nennt_alle_befehle_solange_es_geht():
+    """Der Node haengt seinen Namen vorn dran — das Budget ist knapp, aber
+    fuer die nackte Liste reicht es. Ein Themenmenue waere die schlechtere
+    Antwort, solange die Namen noch hineinpassen."""
+    b = bot()
+    text = run(b.cmd_help("", "x"))
+    fehlend = [c for c in b.router.handlers if c != "help" and c not in text]
+    assert not fehlend, f"nicht in der Uebersicht: {fehlend}"
+
+
+def test_nutzlimit_laesst_platz_fuer_den_absendernamen():
+    b = bot()
+    assert b.settings.nutzlimit == b.settings.max_msg_len - b.settings.sender_reserve
+    assert b.settings.sender_reserve >= 23      # laengster Name im Netz + ": "
+
+
+def test_antworten_bleiben_unter_dem_nutzlimit():
+    """Der Router kuerzt auf das Nutzlimit, nicht auf das Firmwarelimit."""
+    from meshbot.router import Router
+    import json as _json
+
+    async def lang(arg: str, sender: str) -> str:
+        return "A" * 300
+    b = bot()
+    r = Router(b.settings, {"ping": lang})
+    roh = _json.dumps({"payload": {"text": "OE8YML: !ping"}})
+    assert len(run(r.handle(roh))) <= b.settings.nutzlimit
 
 
 def test_uebersicht_faellt_auf_gruppen_zurueck_wenn_es_eng_wird():
     """Kein Abschneiden am Limit, sondern eine kuerzere Antwort."""
     b = bot()
-    b.settings.max_msg_len = 60
+    b.settings.max_msg_len = 84                 # Nutzlimit 60
     text = run(b.cmd_help("", "x"))
-    assert len(text) <= 140 and "Themen:" in text
+    assert len(text) <= 60 and "Themen:" in text
 
 
 def test_gruppenhilfe_listet_die_gruppe():
@@ -61,7 +90,7 @@ def test_einzelhilfe_geht_vor_gruppenhilfe():
 
 def test_alle_hilfetexte_sind_kurz_genug():
     b = bot()
-    zu_lang = {k: len(v) for k, v in b.HILFE.items() if len(v) > b.settings.max_msg_len}
+    zu_lang = {k: len(v) for k, v in b.HILFE.items() if len(v) > b.settings.nutzlimit}
     assert not zu_lang, f"zu lang: {zu_lang}"
 
 
@@ -79,4 +108,4 @@ def test_fehlende_argumente_erklaeren_sich():
     for cmd in ("sicht", "hoehe", "dist"):
         antwort = run(b.router.handlers[cmd]("", "x"))
         assert antwort.startswith(f"!{cmd}"), antwort
-        assert len(antwort) <= b.settings.max_msg_len
+        assert len(antwort) <= b.settings.nutzlimit

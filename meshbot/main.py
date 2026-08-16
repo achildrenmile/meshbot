@@ -407,11 +407,15 @@ class Bot:
         die Gruppennamen zurueck, statt am Zeichenlimit abgeschnitten zu werden.
         """
         alle = [c for gruppe in self.GRUPPEN.values() for c in gruppe]
-        flach = " ".join("!" + c for c in alle) + " | !help <cmd>"
-        if len(flach) <= self.settings.max_msg_len:
-            return flach
-        return ("Themen: " + " ".join("!help " + g for g in self.GRUPPEN)
-                + " — oder !help <befehl>")
+        grenze = self.settings.nutzlimit
+        # Von der schoensten zur kuerzesten Form, erste die passt gewinnt.
+        for kandidat in (" ".join("!" + c for c in alle) + " | !help <cmd>",
+                         " ".join(alle) + " !help <cmd>",
+                         " ".join(alle),
+                         "Themen: " + " ".join(self.GRUPPEN) + " | !help <thema>"):
+            if len(kandidat) <= grenze:
+                return kandidat
+        return "!help <thema>: " + " ".join(self.GRUPPEN)
 
     # --- Infrastruktur ---------------------------------------------------
 

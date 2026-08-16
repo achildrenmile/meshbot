@@ -44,6 +44,11 @@ class Settings(BaseSettings):
     channel_filter: str = ""              # leer = kein Filter
     max_msg_len: int = 140
     hard_msg_len: int = 150
+    # Der Node stellt der Nachricht seinen eigenen Namen voran ("AT-VI-KFHQ: ").
+    # Diese Zeichen zaehlen zum Firmwarelimit, der Bot sieht sie aber nie. Ohne
+    # Reserve lehnt der Node die fertige Nachricht ab (error_code 2) und die
+    # Antwort verschwindet spurlos. Absendernamen im Netz gehen bis 21 Zeichen.
+    sender_reserve: int = 24
     transliterate: bool = True
     default_location: str = "villach"
     sota_default_assoc: str = "OE/KT"
@@ -98,6 +103,12 @@ class Settings(BaseSettings):
     stations_file: Path = Field(default=DATA_DIR / "stations_ktn.json")
     relais_file: Path = Field(default=DATA_DIR / "relais_oe.json")
     summits_file: Path = Field(default=DATA_DIR / "sota_summits.json")
+
+
+    @property
+    def nutzlimit(self) -> int:
+        """Zeichen, die dem Bot fuer den eigenen Text bleiben."""
+        return self.max_msg_len - self.sender_reserve
 
 
 def load_settings() -> Settings:

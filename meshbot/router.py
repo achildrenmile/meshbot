@@ -178,4 +178,4 @@ class Router:
             return None
 
         self.served += 1
-        return prepare(antwort, self.settings.max_msg_len, self.settings.transliterate)
+        return prepare(antwort, self.settings.nutzlimit, self.settings.transliterate)

@@ -35,6 +35,15 @@ weiterer TCP-Client am Node — davon verträgt ein Companion nur zwei.
 | `!spot [assoc]` | `!spots` | `OE8XXX OE/KT-048 14.062 CW 12min` |
 | `!sonne [ort\|lat lon]` | `!sun` | `Sonne: auf 06:04, unter 20:15, dunkel 20:48 (noch 1h03)` |
 | `!netz` | `!status` | `Netz KTN: 32/33 Repeater aktiv, 31729 Weiterleitungen/24h` |
+| `!wo <name>` | `!node` | Position, Verkehr und letzter Empfang eines Knotens |
+| `!melde <was, wo>` | `!luecke` | Feldmeldung erfassen, Position optional |
+| `!qth <locator\|lat lon>` | `!loc` | Maidenhead in Koordinaten und zurück |
+| `!sicht <lat,lon> <lat,lon>` | `!los` | `Sicht 18.4km: FREI, Fresnel 100% (enger bei km17.5, 1347m)` |
+| `!hoehe <lat,lon>` | `!seehoehe` | `Hoehe 46.6719,13.8902: 1478m (EU-DEM 25m)` |
+| `!dist <lat,lon> <lat,lon>` | `!entfernung` | `37.9km, Peilung 312 NW (zurueck 132 SO)` |
+| `!mond [ort\|lat lon]` | `!moon` | `Mond: auf 10:28, unter 21:33, zunehmend 17%` |
+| `!dx` | `!solar` | `DX: SFI 117, A6, K0, SN 83, Xray C1.3` |
+| `!iss [lat lon]` | `!sat` | `ISS 05:44 max 24Grad, NNO>W, 6min` |
 | `!zeit` | `!time`, `!utc` | `UTC 16.08.2026 17:11:53 (Epoch 1786900313)` |
 | `!ping` | | `MeshBot OK, up 3d4h, 42 cmds` |
 | `!help [cmd]` | `!hilfe` | Übersicht, mit Befehl die Einzelheiten |
@@ -47,8 +56,12 @@ Tippfehler werden toleriert (`!wx vilach` findet Villach).
 nächstgelegene Wetterstation genommen und **ihr Name mit ausgegeben**, damit klar
 ist, woher die Werte stammen.
 
-**Zweistufige Hilfe:** `!help` listet die Befehle, `!help sota` erklärt einen davon.
-Bei elf Befehlen passt beides nicht mehr in eine Zeile.
+**Dreistufige Hilfe:** `!help` listet alle Befehle, `!help standort` eine Gruppe
+davon, `!help sicht` einen einzelnen. Die flache Liste ist die bessere Antwort —
+wer `!help` tippt, will sehen was es gibt, nicht ein Menü durchklicken. Sie wächst
+aber mit jedem Befehl; passt sie nicht mehr in eine Nachricht, fällt die Antwort
+selbsttätig auf die Gruppennamen zurück, statt am Zeichenlimit abgeschnitten zu
+werden.
 
 **Gipfel per Position:** Am Berg kennt man die Referenz selten, das Gerät aber die
 Koordinaten. `!sota 46.60 13.67` liefert die nächstgelegenen Gipfel mit Entfernung
@@ -68,6 +81,38 @@ App einfach hineinkopieren kann statt sie abzutippen:
 Gesucht werden die ersten zwei Dezimalzahlen im Text — ganze Zahlen wie ein
 Zoomfaktor in einem Kartenlink stören nicht.
 
+## Funkstrecken prüfen
+
+`!sicht` ist der einzige Befehl, der eine echte Frage des Netzbetriebs beantwortet:
+**Sehen sich diese zwei Punkte?** Er tastet das Gelände zwischen ihnen an 85 Stellen
+ab, legt die Sichtlinie darüber und meldet die engste Stelle.
+
+```
+!sicht 46.603101,13.671223 46.67191,13.89025
+Sicht 18.4km: FREI, Fresnel 100% (enger bei km17.5, 1347m)
+```
+
+Maßstab ist **nicht** die blanke Sichtlinie, sondern wie viel der ersten Fresnelzone
+frei bleibt — jenes Ellipsoids um den Strahl, das der Großteil der Energie
+durchläuft. Ein Strahl, der den Grat streift, ist geometrisch frei und funktechnisch
+tot. Ab 60 % freier Zone heißt es `FREI`, darunter `KNAPP`, bei Berührung
+`BLOCKIERT` samt fehlender Höhe.
+
+Mitgerechnet wird die Erdkrümmung mit dem Standardfaktor k = 4/3: Der Funkstrahl
+biegt sich in der Atmosphäre leicht mit, er läuft also nicht ganz geradeaus.
+
+**Der Nahbereich bleibt außen vor** — die ersten und letzten 500 m einer Strecke
+gehen nicht in die Bewertung ein. Dort ist der Fresnelradius rechnerisch fast null,
+jeder Bodenbuckel ergäbe absurde Prozentwerte, und in dieser Nähe entscheidet die
+Aufstellung über die Verbindung, nicht das Streckenprofil. Wer 50 m vor der Antenne
+ein Hindernis hat, sieht das ohne Rechner.
+
+**Grenzen, die man kennen sollte:** Gerechnet wird auf dem nackten Gelände. Wald,
+Häuser und Masten stehen nicht im Modell — `FREI` heißt „das Gelände steht nicht im
+Weg", nicht „die Verbindung steht". Angenommen werden 3 m Antennenhöhe an beiden
+Enden. Und das Höhenmodell hat 25 m Rasterweite: ein einzelner scharfer Grat kann
+zwischen zwei Rasterpunkten verschwinden.
+
 ## Datenquellen
 
 | Befehl | Quelle | Lizenz / Hinweis |
@@ -81,7 +126,12 @@ Zoomfaktor in einem Kartenlink stören nicht.
 | `!lawine` | EAWS-Bulletin, Region `AT-02` | nur in der Saison |
 | `!spot` | SOTAwatch über die SOTA-API | Vorgabe: nur OE |
 | `!netz` | Karten-API von map.carinthiamesh.com | |
-| `!sonne`, `!zeit` | gerechnet, keine Quelle | funktioniert ohne Internet |
+| `!sonne`, `!mond`, `!zeit` | gerechnet, keine Quelle | funktioniert ohne Internet |
+| `!dist`, `!qth` | gerechnet, keine Quelle | funktioniert ohne Internet |
+| `!sicht`, `!hoehe` | OpenTopoData, Modell EU-DEM 25 m | eine Abfrage je Strecke, Ergebnis eine Woche im Cache |
+| `!dx` | hamqsl.com (N0NBH) | Solar- und Ausbreitungsdaten |
+| `!iss` | Bahndaten von Celestrak, Rechnung mit SGP4 | TLE 6 h im Cache, danach mit `~` markiert |
+| `!wo` | Karten-API von map.carinthiamesh.com | |
 
 Zwischenspeicher: Wetter 10 min, Warnungen 5 min, SOTA und Relais 24 h. Fällt eine
 Quelle aus, kommt der letzte bekannte Wert mit `~` davor — lieber ein alter Wert

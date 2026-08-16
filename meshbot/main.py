@@ -455,7 +455,9 @@ class Bot:
         health = asyncio.create_task(serve_health(self.settings, self))
         log.info("gestartet", rx=self.settings.topic_rx, tx=self.settings.topic_tx,
                  enabled=self.router.enabled, relais=len(self.relais),
-                 orte=len(self.stations), gipfel=len(self.summits))
+                 orte=len(self.stations.get("orte", {})),
+                 stationen=len(self.stations.get("stationen", [])),
+                 gipfel=len(self.summits))
         await stop.wait()
         log.info("beende")
         health.cancel()

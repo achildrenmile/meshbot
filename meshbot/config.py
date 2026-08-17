@@ -54,9 +54,12 @@ class Settings(BaseSettings):
     sota_default_assoc: str = "OE/KT"
 
     # --- Airtime-Bremsen ---
-    global_limit: int = 6                 # Antworten
+    # Der Betrieb zeigt, dass 6 Antworten je 10 Minuten zu knapp sind: wer drei
+    # Orte hintereinander abfragt, laeuft ins Schweigen. Verdoppelt, nicht mehr
+    # — das Stundenlimit des meshinfra-Gates bleibt die harte Grenze darueber.
+    global_limit: int = 12                # Antworten
     global_window_s: int = 600            # je 10 Minuten
-    sender_limit: int = 2                 # Befehle
+    sender_limit: int = 4                 # Befehle
     sender_window_s: int = 300            # je 5 Minuten
     dedup_window_s: int = 60
 

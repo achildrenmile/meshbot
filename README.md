@@ -19,7 +19,8 @@ weiterer TCP-Client am Node — davon verträgt ein Companion nur zwei.
 - **Nur auf Abruf**, nie von selbst
 - **Höchstens 12 Antworten je 10 Minuten** im ganzen Netz, **4 Befehle je 5 Minuten** pro Absender
 - Bei überschrittenem Limit, unbekanntem Befehl oder Duplikat: **Stille**. Eine Absage kostet genauso viel Sendezeit wie eine Antwort
-- Einlieferung erfolgt über das **bestehende Rate-Limit-Gate** von meshinfra (`tx/chan`), nicht daran vorbei — dessen Stundenlimit gilt zusätzlich
+- Einlieferung erfolgt über das **bestehende Rate-Limit-Gate** von meshinfra (`tx/chan`), nicht daran vorbei — dessen eigene Bremsen gelten zusätzlich
+- Beides sind **Token-Buckets**: `limit` Antworten am Stück, danach eine je `window/limit` Sekunden. Global also 12 auf einmal, dann eine alle 50 s; je Absender 4 auf einmal, dann eine alle 75 s
 
 ## Befehle
 

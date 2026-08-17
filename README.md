@@ -35,7 +35,7 @@ weiterer TCP-Client am Node — davon verträgt ein Companion nur zwei.
 | `!lawine` | `!avalanche` | `Lawine KTN: Stufe 3 erheblich (ab Waldgrenze)` |
 | `!spot [assoc]` | `!spots` | `OE8XXX OE/KT-048 14.062 CW 12min` |
 | `!sonne [ort\|lat lon]` | `!sun` | `Sonne: auf 06:04, unter 20:15, dunkel 20:48 (noch 1h03)` |
-| `!netz` | `!status` | `Netz KTN: 32/33 Repeater aktiv, 31729 Weiterleitungen/24h` |
+| `!netz` | `!status` | `Netz KTN: 29/33 aktiv, Weiterl. 2578/1h 31977/24h, stärkster WO-Pölling (395)` |
 | `!wo <name>` | `!node` | Position, Verkehr und letzter Empfang eines Knotens |
 | `!melde <was, wo>` | `!luecke` | Feldmeldung erfassen, Position optional |
 | `!qth <locator\|lat lon>` | `!loc` | Maidenhead in Koordinaten und zurück |
@@ -147,7 +147,7 @@ zwischen zwei Rasterpunkten verschwinden.
 | `!vorhersage` | GeoSphere, Modell `nwp-v1-1h-2500m` | punktgenau über Koordinaten |
 | `!lawine` | EAWS-Bulletin, Region `AT-02` | nur in der Saison |
 | `!spot` | SOTAwatch über die SOTA-API | Vorgabe: nur OE |
-| `!netz` | Karten-API von map.carinthiamesh.com | |
+| `!netz` | Karten-API von map.carinthiamesh.com | zählt über zwei Fenster: Stunde und Tag |
 | `!sonne`, `!mond`, `!zeit` | gerechnet, keine Quelle | funktioniert ohne Internet |
 | `!dist`, `!qth` | gerechnet, keine Quelle | funktioniert ohne Internet |
 | `!sicht`, `!hoehe` | OpenTopoData, Modell EU-DEM 25 m | eine Abfrage je Strecke, Ergebnis eine Woche im Cache |

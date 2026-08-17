@@ -525,9 +525,39 @@ def test_netz_erkennt_kaerntner_knoten():
 
 
 def test_netz_render():
-    text = h_netz.render({"repeater": 32, "gesamt": 33, "weiterleitungen": 28000,
-                          "top": ("AT-WO-St.Ulrich", 3749)})
-    assert "32/33" in text and len(text) <= 140
+    text = h_netz.render({"aktiv_1h": 31, "aktiv_24h": 33, "gesamt": 33,
+                          "weiter_1h": 2533, "weiter_24h": 31865,
+                          "top": ("AT-WO-St.Ulrich", 393)})
+    assert "31/33" in text and "2533/1h" in text and "31865/24h" in text
+    assert len(text) <= 140
+
+
+def test_netz_nennt_den_tageswert_nur_wenn_er_etwas_sagt():
+    """Solange alle Repeater innerhalb eines Tages liefern, ist die Angabe
+    Fuellsel. Faellt einer einen ganzen Tag aus, muss sie dastehen."""
+    basis = {"aktiv_1h": 31, "gesamt": 33, "weiter_1h": 2533, "weiter_24h": 31865, "top": None}
+    assert "24h nur" not in h_netz.render({**basis, "aktiv_24h": 33})
+    assert "24h nur 30" in h_netz.render({**basis, "aktiv_24h": 30})
+
+
+def test_netz_zaehlt_die_stunde_nicht_den_tag():
+    """Der Tageswert meldet jeden als aktiv, der irgendwann gefunkt hat --
+    ein Ausfall waere erst nach 24 Stunden sichtbar."""
+    nodes = [{"name": "AT-VI-A", "role": "repeater", "lat": 46.6, "lon": 13.8,
+              "relay_count_1h": 0, "relay_count_24h": 500},
+             {"name": "AT-VI-B", "role": "repeater", "lat": 46.6, "lon": 13.8,
+              "relay_count_1h": 40, "relay_count_24h": 900}]
+
+    class FakeResp:
+        def json(self): return {"nodes": nodes}
+
+    class FakeClient:
+        async def get(self, url, params=None): return FakeResp()
+
+    w = run(h_netz.fetch(FakeClient(), "http://karte.test"))
+    assert (w["aktiv_1h"], w["aktiv_24h"], w["gesamt"]) == (1, 2, 2)
+    assert (w["weiter_1h"], w["weiter_24h"]) == (40, 1400)
+    assert w["top"] == ("AT-VI-B", 40)          # staerkster nach der Stunde
 
 
 # --- Vorhersage ----------------------------------------------------------

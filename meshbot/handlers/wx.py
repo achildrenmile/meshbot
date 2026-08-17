@@ -3,12 +3,16 @@
 Quelle: dataset.api.hub.geosphere.at, Datensatz `tawes-v1-10min`, frei nutzbar
 unter CC BY 4.0. Die Zuordnung Ort → Station steht in `data/stations_ktn.json`
 und wurde aus der Stationsliste der GeoSphere erzeugt (nächstgelegene Station).
+Die Ortsnamen selbst stammen aus OpenStreetMap (ODbL) und werden von
+`tools/build_orte.py` erzeugt: Kärnten hat 34 Wetterstationen, aber dreitausend
+Orte — wer in Knappenberg steht, tippt "Knappenberg" und nicht "Friesach".
 """
 
 from __future__ import annotations
 
 import json
 import math
+import re
 from difflib import get_close_matches
 from typing import Any
 
@@ -16,6 +20,10 @@ import httpx
 
 from ..config import Settings
 from .sota import parse_coords
+
+# Klammerzusaetze sind keine Ortsangabe: die Station "Klagenfurt-Flughafen
+# (Automat)" ist fuer den Fragenden schlicht Klagenfurt-Flughafen.
+KLAMMER = re.compile(r"\s*\([^)]*\)")
 
 PARAMS = "TL,RF,FFAM,DD,P"          # Temperatur, Feuchte, Wind, Richtung, Druck
 HIMMELSRICHTUNG = ["N", "NO", "O", "SO", "S", "SW", "W", "NW"]
@@ -57,6 +65,24 @@ def station_bei(stationen: list[dict[str, Any]], lat: float, lon: float) -> dict
     return min(stationen, key=lambda s: distanz_km(lat, lon, s["lat"], s["lon"]))
 
 
+def normalisiere(name: str) -> str:
+    """Ortsname auf die Schreibweise des Verzeichnisses bringen.
+
+    Muss zu `tools/build_orte.py` passen, sonst findet der Schluessel seinen
+    Eintrag nicht. Punkte und Bindestriche fallen weg, damit "St.Veit",
+    "St-Veit" und "Sankt Veit" alle bei "st veit" landen. Den Schraegstrich
+    kennt nur diese Seite: im Verzeichnis trennt er die zweisprachigen Namen
+    in zwei Eintraege, in einer Anfrage ist er ein Tippfehler.
+    """
+    s = KLAMMER.sub("", " ".join(name.split())).lower()
+    for alt, neu in (("ö", "oe"), ("ä", "ae"), ("ü", "ue"), ("ß", "ss"),
+                     ("š", "s"), ("č", "c"), ("ž", "z"),
+                     (".", " "), ("-", " "), ("/", " "), ("'", ""), ("`", "")):
+        s = s.replace(alt, neu)
+    # "Bad Sankt Leonhard" und "Bad St. Leonhard" sind derselbe Ort.
+    return " ".join("st" if w == "sankt" else w for w in s.split())
+
+
 def resolve_place(arg: str, stations: dict[str, Any], default: str) -> tuple[str, dict[str, Any]] | None:
     """Ort oder Position auf eine Station abbilden.
 
@@ -75,11 +101,12 @@ def resolve_place(arg: str, stations: dict[str, Any], default: str) -> tuple[str
                                "lat": s["lat"], "lon": s["lon"]}
         return None
 
-    key = " ".join(arg.split()).lower().strip() or default
-    key = key.replace("ö", "oe").replace("ä", "ae").replace("ü", "ue").replace("ß", "ss")
+    key = normalisiere(arg) or normalisiere(default)
     if key in orte:
         return key, orte[key]
-    treffer = get_close_matches(key, list(orte), n=1, cutoff=0.6)
+    # Bei dreitausend Ortsnamen findet eine lockere Schwelle zu jedem Tippfehler
+    # irgendeinen Weiler. 0.8 laesst "vilach" durch und "xyz" nicht.
+    treffer = get_close_matches(key, list(orte), n=1, cutoff=0.8)
     if treffer:
         return treffer[0], orte[treffer[0]]
     return None
@@ -96,10 +123,19 @@ async def fetch(client: httpx.AsyncClient, settings: Settings, station_id: str) 
     return {name: (props.get(name) or {}).get("data", [None])[0] for name in PARAMS.split(",")}
 
 
-def render(ort: str, werte: dict[str, Any], stale: bool = False) -> str:
-    """Eine Zeile, feste Reihenfolge: Temperatur, Feuchte, Wind, Druck."""
+def render(ort: str, werte: dict[str, Any], stale: bool = False,
+           station: str | None = None) -> str:
+    """Eine Zeile, feste Reihenfolge: Temperatur, Feuchte, Wind, Druck.
+
+    Steht die Station woanders als der gefragte Ort, wird sie mitgenannt. In
+    Knappenberg misst niemand — die Werte kommen aus Friesach, und das muss
+    dranstehen, sonst haelt es jemand fuer eine Messung vor der Haustuer.
+    """
     marker = "~" if stale else ""
-    teile = [f"WX {ort.title()}: {marker}"]
+    kopf = ort.title()
+    if station and normalisiere(station) != normalisiere(ort):
+        kopf = f"{kopf} ({station})"
+    teile = [f"WX {kopf}: {marker}"]
     if werte.get("TL") is not None:
         teile.append(f"{werte['TL']:.1f}C")
     if werte.get("RF") is not None:

@@ -1,0 +1,17 @@
+{
+ "bad eisenkappel": {"station_id": "11234", "station": "Bad Eisenkappel", "lat": 46.4842, "lon": 14.5906, "hoehe": 623.0},
+ "feldkirchen": {"station_id": "11227", "station": "Feldkirchen", "lat": 46.7228, "lon": 14.0958, "hoehe": 546.0},
+ "gailtal": {"station_id": "11259", "station": "Hermagor", "lat": 46.6255, "lon": 13.369, "hoehe": 562.0},
+ "hermagor": {"station_id": "11259", "station": "Hermagor", "lat": 46.6255, "lon": 13.369, "hoehe": 562.0},
+ "kanzelhoehe": {"station_id": "11216", "station": "Kanzelhoehe", "lat": 46.6772, "lon": 13.9083},
+ "klagenfurt": {"station_id": "8989076", "station": "Klagenfurt", "lat": 46.6247, "lon": 14.3053, "hoehe": 441.0},
+ "lavanttal": {"station_id": "11229", "station": "St.Andrae I.L.", "lat": 46.8406, "lon": 14.8408, "hoehe": 403.0},
+ "millstatt": {"station_id": "11215", "station": "Millstatt", "lat": 46.8047, "lon": 13.5786, "hoehe": 721.0},
+ "noetsch": {"station_id": "11218", "station": "Bad Bleiberg", "lat": 46.5889, "lon": 13.6208, "hoehe": 909.0},
+ "seeboden": {"station_id": "11272", "station": "Spittal", "lat": 46.8175, "lon": 13.5089, "hoehe": 542.0},
+ "spittal": {"station_id": "11272", "station": "Spittal", "lat": 46.7956, "lon": 13.4967, "hoehe": 542.0},
+ "st veit": {"station_id": "11237", "station": "St.Veit", "lat": 46.7667, "lon": 14.3603, "hoehe": 463.0},
+ "villach": {"station_id": "11213", "station": "Villach", "lat": 46.6103, "lon": 13.8558, "hoehe": 493.0},
+ "voelkermarkt": {"station_id": "11257", "station": "Voelkermarkt-Goldbrunnhof", "lat": 46.6631, "lon": 14.6339, "hoehe": 466.0},
+ "wolfsberg": {"station_id": "11229", "station": "St.Andrae I.L.", "lat": 46.8406, "lon": 14.8408, "hoehe": 403.0}
+}

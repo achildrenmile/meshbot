@@ -18,7 +18,7 @@ samt deutscher und englischer Aliase. Präfix `!`, Groß- und Kleinschreibung eg
 
 ## Grenzen
 - Antwort ≤ 140 Zeichen (hart), niemals mehrere Nachrichten
-- global 6 Antworten je 10 min, je Absender 2 Befehle je 5 min
+- global 12 Antworten je 10 min, je Absender 4 Befehle je 5 min
 - Duplikate innerhalb 60 s werden verworfen
 - eigene Nachrichten werden nie als Befehl gewertet
 

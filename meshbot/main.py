@@ -72,16 +72,23 @@ class Bot:
         if treffer is None:
             return f"WX: {arg[:20]} unbekannt"
         ort, station = treffer
-        if ort in self.cache_wx:
-            return h_wx.render(ort, self.cache_wx[ort])
+        # Der Cache haengt an der Station, nicht am Ortsnamen: dreitausend Orte
+        # teilen sich 34 Stationen, Knappenberg und Friesach sind dieselbe
+        # Messung. Am Ortsnamen gecacht holt jeder Weiler die Werte neu.
+        sid = station["station_id"]
+        name = station.get("station")
+        if sid in self.cache_wx:
+            return h_wx.render(ort, self.cache_wx[sid], station=name)
         try:
-            werte = await self._mit_retry(h_wx.fetch, self.settings, station["station_id"])
+            werte = await self._mit_retry(h_wx.fetch, self.settings, sid)
         except Exception:
-            alt = self.stale.get(f"wx:{ort}")
-            return h_wx.render(ort, alt, stale=True) if alt else "WX: Quelle nicht erreichbar"
-        self.cache_wx[ort] = werte
-        self.stale[f"wx:{ort}"] = werte
-        return h_wx.render(ort, werte)
+            alt = self.stale.get(f"wx:{sid}")
+            if alt is None:
+                return "WX: Quelle nicht erreichbar"
+            return h_wx.render(ort, alt, stale=True, station=name)
+        self.cache_wx[sid] = werte
+        self.stale[f"wx:{sid}"] = werte
+        return h_wx.render(ort, werte, station=name)
 
     async def cmd_uwz(self, arg: str, sender: str) -> str | None:
         if "aktuell" in self.cache_uwz:

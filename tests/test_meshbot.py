@@ -359,6 +359,77 @@ def test_position_nennt_die_station():
     assert station["station"].split()[0][:5].lower() in text.lower()
 
 
+# --- Ortsverzeichnis ------------------------------------------------------
+
+@pytest.mark.parametrize("arg", [
+    "Treibach",              # Ortsteil von Althofen, meldete am 17.08. "unbekannt"
+    "Knappenberg",           # dito, Huettenberg
+    "Arriach",               # Stationsort, fehlte trotzdem im Verzeichnis
+    "Bad St. Leonhard",      # Punkt und "St." statt "Sankt"
+    "Bad Sankt Leonhard",
+    "Bistrica pri Pliberku", # slowenische Haelfte eines zweisprachigen Namens
+    "Obergreutschach",
+])
+def test_kaerntner_orte_werden_gefunden(arg):
+    s = Settings(mqtt_host="test")
+    assert h_wx.resolve_place(arg, h_wx.load_stations(s), "villach") is not None
+
+
+def test_ortsnamen_bekommen_talstationen():
+    """Arnoldstein liegt auf 580 m, die Villacher Alpe auf 2117 m und ist
+    trotzdem die naechste Station. Ortsnamen duerfen dort nicht landen —
+    sonst antwortet der Bot mit zehn Grad zu wenig.
+
+    Ausnahme sind Orte, deren eigene Station am Berg steht (Mallnitz,
+    Flattnitz, Kanzelhoehe). Die erkennt man am Namen.
+    """
+    s = Settings(mqtt_host="test")
+    daten = h_wx.load_stations(s)
+    hoehe = {st["id"]: st["hoehe"] for st in daten["stationen"]}
+    am_berg = {k for k, v in daten["orte"].items() if hoehe.get(v["station_id"], 0) > 1100}
+    assert am_berg <= {"flattnitz", "kanzelhoehe", "katschberg", "koelnbreinsperre",
+                       "mallnitz", "mallnitz bad", "villacher alpe"}, am_berg
+    assert "arnoldstein" not in am_berg and "annenheim" not in am_berg
+
+
+def test_keine_station_liegt_absurd_weit_weg():
+    """Kaernten ist 180 km breit und hat 34 Stationen. Mehr als 30 km Abstand
+    heisst, dass die Zuordnung danebengegriffen hat."""
+    s = Settings(mqtt_host="test")
+    daten = h_wx.load_stations(s)
+    stationen = {st["id"]: st for st in daten["stationen"]}
+    for ort, v in daten["orte"].items():
+        st = stationen.get(v["station_id"])
+        if st is None:
+            continue
+        d = h_wx.distanz_km(v["lat"], v["lon"], st["lat"], st["lon"])
+        assert d <= 30, f"{ort} -> {st['name']} ({d:.0f} km)"
+
+
+@pytest.mark.parametrize("arg", ["Innsbruck", "Ljubljana", "xyzquark"])
+def test_fremde_orte_bleiben_unbekannt(arg):
+    """Das Verzeichnis endet an der Landesgrenze. Ein Treffer waere hier
+    schlimmer als keiner: er lieferte Kaerntner Werte fuer Tirol."""
+    s = Settings(mqtt_host="test")
+    assert h_wx.resolve_place(arg, h_wx.load_stations(s), "villach") is None
+
+
+def test_station_wird_genannt_wenn_sie_woanders_steht():
+    assert h_wx.render("knappenberg", {"TL": 20.0}, station="Friesach").startswith(
+        "WX Knappenberg (Friesach):")
+    # Am Stationsort selbst waere die Klammer nur Ballast.
+    assert h_wx.render("villach", {"TL": 20.0}, station="Villach").startswith("WX Villach:")
+
+
+def test_keine_antwort_sprengt_das_zeichenlimit():
+    """Ortsname plus Stationsname plus Messwerte — der laengste Fall im
+    Verzeichnis muss ungekuerzt durchpassen."""
+    s = Settings(mqtt_host="test")
+    werte = {"TL": -12.3, "RF": 100, "FFAM": 33.3, "DD": 225, "P": 1013}
+    for ort, v in h_wx.load_stations(s)["orte"].items():
+        assert len(h_wx.render(ort, werte, station=v.get("station"))) <= s.nutzlimit
+
+
 # --- Eigenschaft ueber alles ---------------------------------------------
 
 @pytest.mark.parametrize("roh", [

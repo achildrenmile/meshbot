@@ -17,7 +17,7 @@ weiterer TCP-Client am Node — davon verträgt ein Companion nur zwei.
 
 - Antworten sind auf **140 Zeichen** begrenzt, hart, vor dem Senden
 - **Nur auf Abruf**, nie von selbst
-- **Höchstens 6 Antworten je 10 Minuten** im ganzen Netz, **2 Befehle je 5 Minuten** pro Absender
+- **Höchstens 12 Antworten je 10 Minuten** im ganzen Netz, **4 Befehle je 5 Minuten** pro Absender
 - Bei überschrittenem Limit, unbekanntem Befehl oder Duplikat: **Stille**. Eine Absage kostet genauso viel Sendezeit wie eine Antwort
 - Einlieferung erfolgt über das **bestehende Rate-Limit-Gate** von meshinfra (`tx/chan`), nicht daran vorbei — dessen Stundenlimit gilt zusätzlich
 
@@ -50,6 +50,26 @@ weiterer TCP-Client am Node — davon verträgt ein Companion nur zwei.
 
 Ohne Ort nimmt `!wx` und `!relais` den Standardort aus der Konfiguration.
 Tippfehler werden toleriert (`!wx vilach` findet Villach).
+
+**Ortsnamen: rund 3200 Kärntner Orte**, aus OpenStreetMap erzeugt und in
+`data/stations_ktn.json` abgelegt — bis hinunter zu Weilern und Ortsteilen.
+`Sankt` und `St.` sind derselbe Ort, zweisprachige Namen gelten in beiden
+Sprachen (`Feistritz ob Bleiburg` wie `Bistrica pri Pliberku`). Das Verzeichnis
+endet an der Landesgrenze: `!wx Innsbruck` bleibt unbekannt, denn ein Treffer
+wäre schlimmer als keiner — er lieferte Kärntner Werte für Tirol.
+
+Gemessen wird an **34 Wetterstationen**, und **Ortsnamen bekommen Talstationen**
+(bis 1100 m). Arnoldstein liegt auf 580 m, die Villacher Alpe auf 2117 m und ist
+trotzdem die nächste Station — ohne diese Regel antwortet `!wx arnoldstein` mit
+zehn Grad zu wenig. Wo die eigene Station am Berg steht (Mallnitz, Flattnitz,
+Kanzelhöhe), gilt sie. Bei einer **Position** gilt die Grenze nicht: wer vom
+Dobratsch fragt, will die Werte vom Dobratsch.
+
+Steht die Station woanders als der gefragte Ort, wird sie mitgenannt:
+
+```
+!wx Knappenberg   →   WX Knappenberg (Friesach): 25.3C, 51%, Wind 11km/h NO, 954hPa
+```
 
 **Statt eines Ortsnamens geht überall auch eine Position** — `!wx 46.6031 13.6712`,
 `!relais 2m geo:46.79,13.50`, `!vorhersage 46,6247, 14,3053`. Bei `!wx` wird die
@@ -118,6 +138,7 @@ zwischen zwei Rasterpunkten verschwinden.
 | Befehl | Quelle | Lizenz / Hinweis |
 |---|---|---|
 | `!wx` | GeoSphere Austria, Datensatz `tawes-v1-10min` | CC BY 4.0, kein Schlüssel nötig |
+| `!wx` Ortsnamen | OpenStreetMap, erzeugt mit `tools/build_orte.py` | ODbL, als JSON im Repo, ohne Netz |
 | `!uwz` | GeoSphere Warn-API, `getWarningsForCoords` | vier Abfragepunkte decken Kärnten ab |
 | `!sota` per Referenz | SOTA API v2 | |
 | `!sota` per Position | 1780 Gipfel aus OE/KT, ST, TI, SB, OO im Repo | lokal, ohne Netz, dient auch als Rückfall |
@@ -198,6 +219,20 @@ PY
 **Wetterstationen**: `data/stations_ktn.json` bildet Ort auf die nächstgelegene
 TAWES-Station ab. Bewusst werden **Talstationen bevorzugt** (bis 1100 m) — sonst
 liefert eine Abfrage für Nötsch die Werte der Villacher Alpe auf 2140 m.
+
+**Ortsverzeichnis** neu aus OpenStreetMap erzeugen:
+
+```bash
+python3 tools/build_orte.py
+```
+
+Zieht rund 3200 Kärntner Ortsknoten über Overpass, verwirft alles außerhalb der
+Landesgrenze und hängt jeden Ort an eine Talstation. Die Stationsliste bleibt
+stehen, die Handpflege kommt aus `data/orte_gepflegt.json` und überschreibt das
+Ergebnis — das erzeugte Verzeichnis selbst wird jedes Mal komplett ersetzt,
+sonst überlebte ein einmal falsch erzeugter Eintrag jeden weiteren Lauf.
+Overpass antwortet unter Last mit `504`; das Skript wartet und wiederholt, ein
+Lauf dauert deshalb bis zu drei Minuten.
 
 ## Tests
 

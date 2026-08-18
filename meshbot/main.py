@@ -70,7 +70,7 @@ class Bot:
     async def cmd_wx(self, arg: str, sender: str) -> str | None:
         treffer = h_wx.resolve_place(arg, self.stations, self.settings.default_location)
         if treffer is None:
-            return f"WX: {arg[:20]} unbekannt"
+            return h_wx.render_unbekannt(arg)
         ort, station = treffer
         # Der Cache haengt an der Station, nicht am Ortsnamen: dreitausend Orte
         # teilen sich 34 Stationen, Knappenberg und Friesach sind dieselbe

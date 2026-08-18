@@ -123,6 +123,49 @@ async def fetch(client: httpx.AsyncClient, settings: Settings, station_id: str) 
     return {name: (props.get(name) or {}).get("data", [None])[0] for name in PARAMS.split(",")}
 
 
+# Antworten auf einen Ort, den es nicht gibt. Ausgewaehlt wird nach der
+# Quersumme der Anfrage, nicht zufaellig: Derselbe Tippfehler bekommt immer
+# dieselbe Antwort, das bleibt pruefbar und wirkt weniger wie eine Maschine,
+# die wuerfelt.
+SPOTT = [
+    "{ort}? 🧐 Kenn i ned. Da war die Landkarte schneller: !wx villach",
+    "{ort} 🗺️❓ Keiner von 3199 Orten. Probier: !wx villach",
+    "{ort}? 🤨 Nie gehoert. Tipp: einen Ort in Kaernten waehlen",
+    "{ort} 🫠 gibt's ned. Nochmal, diesmal mit Ort: !wx spittal",
+    "{ort}? 🔍🤷 Nix gfunden. Position geht immer: !wx 46.61 13.85",
+]
+
+# Orte, die es erklaertermassen nicht gibt. Wer die tippt, hat sich keinen
+# Tippfehler geleistet, sondern einen Scherz gemacht — der darf zurueckkommen.
+SPEZIAL = {
+    "hintertupfing": "Hintertupfing 🙄🏚️🐄 Erfunden. Wie deine Ortskenntnis. Nimm Villach",
+    "kleinkleckersdorf": "Kleinkleckersdorf 🙄🐓 Auch beim dritten Versuch erfunden",
+    "bielefeld": "Bielefeld 🛸🤫 Gibt's bekanntlich ned. Falscher Bot fuer Verschwoerungen",
+    "entenhausen": "Entenhausen 🦆💰 Wetter dort: Comic. Hier: Kaernten",
+    "absurdistan": "Absurdistan 🤡🌍 Liegt knapp ausserhalb unserer 34 Stationen",
+    "timbuktu": "Timbuktu 🐪🏜️ 4700 km zu weit. Kaernten faengt bei Villach an",
+    "walachei": "Walachei 🐺🌲 Nicht mal die Karawanken sind so weit weg",
+    "mordor": "Mordor 🌋👁️ Ein Ort geht ned einfach so hinein. Nimm !wx villach",
+    "nirgendwo": "Nirgendwo 🕳️🤷 Genau dort ist auch deine Wetterstation",
+    "buxtehude": "Buxtehude 🐕🐰 Liegt 900 km nordwestlich. Knapp daneben",
+}
+
+
+def render_unbekannt(arg: str) -> str:
+    """Der Ort ist nicht im Verzeichnis.
+
+    Kostet dieselbe Sendezeit wie die alte Absage `WX: <ort> unbekannt`, sagt
+    aber dazu, wie es richtig geht — sonst waere es nur Spott ohne Nutzen.
+    """
+    ort = " ".join(arg.split())[:20] or "Nix"
+    key = normalisiere(ort)
+    if key in SPEZIAL:
+        return "WX: " + SPEZIAL[key]
+    # Auf der normalisierten Form waehlen, sonst bekommt "villagh" eine andere
+    # Antwort als "Villagh" — derselbe Tippfehler soll dieselbe bleiben.
+    return "WX: " + SPOTT[sum(key.encode()) % len(SPOTT)].format(ort=ort.title())
+
+
 def render(ort: str, werte: dict[str, Any], stale: bool = False,
            station: str | None = None) -> str:
     """Eine Zeile, feste Reihenfolge: Temperatur, Feuchte, Wind, Druck.

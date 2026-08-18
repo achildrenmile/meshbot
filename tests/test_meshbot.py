@@ -460,6 +460,43 @@ def test_fremde_orte_bleiben_unbekannt(arg):
     assert h_wx.resolve_place(arg, h_wx.load_stations(s), "villach") is None
 
 
+def test_unbekannter_ort_wird_aufgezogen_aber_hilfreich():
+    """Spott ohne Hinweis waere nur unhoeflich. Jede Variante nennt einen Weg,
+    wie es richtig geht — der Ort steht ebenfalls drin, sonst raet der
+    Empfaenger, worauf sich die Antwort bezieht."""
+    for variante in h_wx.SPOTT:
+        text = variante.format(ort="Irgendwo")
+        assert "!wx" in text or "Position" in text or "Kaernten" in text
+        assert "Irgendwo" in text          # sonst raet der Empfaenger, worum es ging
+    text = h_wx.render_unbekannt("Villagh")
+    assert text.startswith("WX: ") and "Villagh" in text
+
+
+def test_unbekannter_ort_ignoriert_gross_kleinschreibung():
+    """Derselbe Tippfehler bekommt immer dieselbe Antwort, egal wie getippt."""
+    assert h_wx.render_unbekannt("VILLAGH") == h_wx.render_unbekannt("villagh")
+    assert h_wx.render_unbekannt("HINTERTUPFING") == h_wx.render_unbekannt("hintertupfing")
+
+
+def test_erfundene_orte_bekommen_eine_eigene_antwort():
+    """Wer "Hintertupfing" tippt, hat sich keinen Tippfehler geleistet, sondern
+    einen Scherz gemacht. Das darf zurueckkommen."""
+    text = h_wx.render_unbekannt("Hintertupfing")
+    assert "Erfunden" in text
+    assert text != h_wx.render_unbekannt("Hintertupfingx")     # nur der Scherz selbst
+    assert h_wx.render_unbekannt("BIELEFELD") == h_wx.render_unbekannt("bielefeld")
+
+
+def test_unbekannter_ort_sprengt_das_zeichenlimit_nicht(settings):
+    """Emojis sind in UTF-8 bis zu sieben Byte lang, die Firmware zaehlt Bytes.
+    Ein langer Ortsname darf die Antwort nicht ueber die harte Grenze heben."""
+    lang = "Kleinkleckersdorf am Berge und noch viel weiter hinten"
+    for arg in ("x", lang, "Ljubljana", "München", "", *h_wx.SPEZIAL):
+        text = prepare(h_wx.render_unbekannt(arg), settings.nutzlimit, settings.transliterate)
+        assert len(text) <= settings.nutzlimit
+        assert len(text.encode()) <= settings.hard_msg_len
+
+
 def test_station_wird_genannt_wenn_sie_woanders_steht():
     assert h_wx.render("knappenberg", {"TL": 20.0}, station="Friesach").startswith(
         "WX Knappenberg (Friesach):")

@@ -23,6 +23,10 @@ PUNKTE = [
     ("Lavanttal", 46.8406, 14.8408),
 ]
 
+class QuelleNichtErreichbar(RuntimeError):
+    """Kein Abfragepunkt hat geantwortet — Schweigen ist keine Entwarnung."""
+
+
 STUFE = {1: "GELB", 2: "ORANGE", 3: "ROT"}
 TYP = {
     1: "Wind", 2: "Regen", 3: "Schnee", 4: "Glatteis", 5: "Gewitter",
@@ -31,8 +35,19 @@ TYP = {
 
 
 async def fetch(client: httpx.AsyncClient, url: str) -> list[dict[str, Any]]:
-    """Warnungen aller Abfragepunkte einsammeln, doppelte zusammenfassen."""
+    """Warnungen aller Abfragepunkte einsammeln, doppelte zusammenfassen.
+
+    Wirft, wenn **kein einziger** Punkt geantwortet hat. Ohne diese
+    Unterscheidung sind "nichts gefunden" und "nichts erreicht" dasselbe leere
+    Ergebnis — und der Bot funkt bei ausgefallener Warn-API Entwarnung. Das ist
+    die gefaehrlichste Falschaussage, die ein Warndienst machen kann.
+
+    Ein einzelner erreichter Punkt genuegt dagegen: Die vier Punkte decken
+    verschiedene Landesteile ab, ein Ausfall davon macht die Antwort
+    unvollstaendig, nicht falsch.
+    """
     treffer: dict[int, dict[str, Any]] = {}
+    erreicht = 0
     for name, lat, lon in PUNKTE:
         try:
             resp = await client.get(url, params={"lat": lat, "lon": lon, "lang": "de"})
@@ -40,6 +55,7 @@ async def fetch(client: httpx.AsyncClient, url: str) -> list[dict[str, Any]]:
             warnungen = resp.json().get("properties", {}).get("warnings", [])
         except Exception:
             continue
+        erreicht += 1
         for w in warnungen:
             p = w.get("properties", {})
             wid = p.get("warnid")
@@ -53,17 +69,22 @@ async def fetch(client: httpx.AsyncClient, url: str) -> list[dict[str, Any]]:
             })
             if name not in eintrag["gebiete"]:
                 eintrag["gebiete"].append(name)
+    if erreicht == 0:
+        raise QuelleNichtErreichbar(f"kein Abfragepunkt erreichbar ({len(PUNKTE)} versucht)")
     return list(treffer.values())
 
 
 def render(warnungen: list[dict[str, Any]], stale: bool = False) -> str:
+    marker = "~" if stale else ""
     if not warnungen:
-        return "UWZ KTN: keine Warnungen aktiv"
+        # Auch die Entwarnung braucht das Alterszeichen. Sonst sieht ein Stand
+        # von vor zwei Stunden aus wie eine frische Entwarnung -- und genau da
+        # ist der Unterschied am wichtigsten.
+        return f"UWZ KTN: {marker}keine Warnungen aktiv"
 
     def rang(w: dict[str, Any]) -> int:
         return -(w.get("stufe") or 0)
 
-    marker = "~" if stale else ""
     teile = []
     for w in sorted(warnungen, key=rang):
         stufe = STUFE.get(w.get("stufe") or 0, "WARN")

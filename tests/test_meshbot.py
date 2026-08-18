@@ -18,6 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from meshbot.config import Settings  # noqa: E402
 from meshbot.formatting import clamp, prepare, transliterate  # noqa: E402
+from meshbot.main import Bot  # noqa: E402
 from meshbot.handlers import lawine as h_lawine  # noqa: E402
 from meshbot.handlers import melde as h_melde  # noqa: E402
 from meshbot.handlers import qth as h_qth  # noqa: E402
@@ -230,6 +231,51 @@ def test_wx_ortsaufloesung_toleriert_tippfehler():
 
 def test_uwz_leer():
     assert h_uwz.render([]) == "UWZ KTN: keine Warnungen aktiv"
+
+
+class _UwzClient:
+    """Warn-API, bei der nur die ersten `ok` Abfragepunkte antworten."""
+
+    def __init__(self, ok: int, warnungen: list | None = None) -> None:
+        self.ok, self.warnungen, self.n = ok, warnungen or [], 0
+
+    async def get(self, url, params=None):
+        self.n += 1
+        if self.n > self.ok:
+            raise ConnectionError("Quelle weg")
+        daten = {"properties": {"warnings": self.warnungen}}
+
+        class Resp:
+            def raise_for_status(self): pass
+            def json(self): return daten
+        return Resp()
+
+
+def test_uwz_meldet_ausfall_statt_entwarnung():
+    """Faellt die Warn-API komplett aus, darf der Bot nicht "keine Warnungen"
+    funken. Schweigen ist keine Entwarnung -- das waere die gefaehrlichste
+    Falschaussage, die ein Warndienst machen kann."""
+    with pytest.raises(h_uwz.QuelleNichtErreichbar):
+        run(h_uwz.fetch(_UwzClient(ok=0), "http://warn.test"))
+
+
+def test_uwz_ein_erreichter_punkt_genuegt():
+    """Ein Ausfall einzelner Punkte macht die Antwort unvollstaendig, nicht
+    falsch — dafuer wird nicht der ganze Befehl abgewuergt."""
+    assert run(h_uwz.fetch(_UwzClient(ok=1), "http://warn.test")) == []
+
+
+def test_uwz_faellt_auf_den_letzten_wert_zurueck(settings, monkeypatch):
+    """Bei Ausfall kommt der letzte bekannte Stand mit ~, sonst eine ehrliche
+    Absage — beides ist besser als eine erfundene Entwarnung."""
+    b = Bot(settings)
+    async def kaputt(*a, **k):
+        raise h_uwz.QuelleNichtErreichbar("Testausfall")
+    monkeypatch.setattr(h_uwz, "fetch", kaputt)
+
+    assert run(b.cmd_uwz("", "x")) == "UWZ: Quelle nicht erreichbar"
+    b.stale["uwz"] = []
+    assert run(b.cmd_uwz("", "x")) == "UWZ KTN: ~keine Warnungen aktiv"
 
 
 def test_uwz_sortiert_nach_stufe_und_kuerzt():

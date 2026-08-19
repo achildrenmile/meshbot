@@ -51,7 +51,7 @@ ALIASES = {
     "dist": "dist", "distanz": "dist", "entfernung": "dist", "peilung": "dist",
     "dx": "dx", "solar": "dx", "bedingungen": "dx",
     "mond": "mond", "moon": "mond",
-    "az": "az", "zone": "az", "gipfelzone": "az", "aktivierungszone": "az",
+    "az": "az", "sotaaz": "az", "zone": "az", "gipfelzone": "az", "aktivierungszone": "az",
     "iss": "iss", "sat": "iss",
 }
 

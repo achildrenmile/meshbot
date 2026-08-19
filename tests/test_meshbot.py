@@ -238,6 +238,14 @@ QUADRAT = [[(46.900, 13.850), (46.910, 13.850), (46.910, 13.860), (46.900, 13.86
 MIT_LOCH = QUADRAT + [[(46.904, 13.854), (46.906, 13.854), (46.906, 13.856), (46.904, 13.856)]]
 
 
+@pytest.mark.parametrize("eingabe", [
+    "!az 46.9 13.8", "!sotaaz 46.9 13.8", "!zone 46.9 13.8",
+    "!gipfelzone 46.9 13.8", "!aktivierungszone 46.9 13.8",
+])
+def test_az_aliase_landen_beim_selben_befehl(eingabe):
+    assert parse_command(eingabe) == ("az", "46.9 13.8")
+
+
 def test_az_url_ersetzt_nur_den_ersten_bindestrich():
     assert h_az.az_url("OE/KT-048") == "https://az.sotl.as/OE/KT/048.gpx"
 

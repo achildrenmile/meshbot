@@ -13,6 +13,7 @@ import structlog
 from cachetools import TTLCache
 
 from .config import Settings, load_settings
+from .handlers import az as h_az
 from .handlers import dx as h_dx
 from .handlers import geo as h_geo
 from .handlers import iss as h_iss
@@ -54,6 +55,8 @@ class Bot:
         self.cache_dx: TTLCache = TTLCache(maxsize=2, ttl=settings.cache_ttl_dx_s)
         self.cache_tle: TTLCache = TTLCache(maxsize=2, ttl=settings.cache_ttl_tle_s)
         self.cache_gelaende: TTLCache = TTLCache(maxsize=128, ttl=settings.cache_ttl_gelaende_s)
+        # Zonenpolygone aendern sich nur, wenn SOTLAS sie neu rechnet.
+        self.cache_az: TTLCache = TTLCache(maxsize=64, ttl=settings.cache_ttl_az_s)
         self.stale: dict[str, Any] = {}          # letzte gute Antwort je Schlüssel
         self.router = Router(settings, {
             "wx": self.cmd_wx, "uwz": self.cmd_uwz, "sota": self.cmd_sota,
@@ -63,6 +66,7 @@ class Bot:
             "wo": self.cmd_wo, "melde": self.cmd_melde, "qth": self.cmd_qth,
             "sicht": self.cmd_sicht, "hoehe": self.cmd_hoehe, "dist": self.cmd_dist,
             "dx": self.cmd_dx, "mond": self.cmd_mond, "iss": self.cmd_iss,
+            "az": self.cmd_az,
         })
         self.mqtt = MqttClient(settings, on_message=self.on_message, on_admin=self.on_admin)
 
@@ -188,6 +192,45 @@ class Bot:
         if gipfel:
             self.stale[f"sota:{ref}"] = gipfel
         return h_sota.render(ref, gipfel)
+
+    async def cmd_az(self, arg: str, sender: str) -> str:
+        """Liegt die Position in der SOTA-Aktivierungszone?
+
+        Geprueft werden bis zu drei Gipfel, naechster zuerst: Zwischen zwei
+        Gipfeln kann der naechstgelegene der falsche sein, und die Frage
+        lautet "bin ich in *einer* Zone", nicht "in der des naechsten".
+        """
+        koord = h_sota.parse_coords(arg)
+        if koord is None:
+            return "!az <lat lon> — liegt die Position in der SOTA-Zone?"
+
+        nah = [g for g in h_sota.nearest(self.summits, *koord, limit=h_az.MAX_GIPFEL)
+               if g["_d"] <= h_az.MAX_ENTFERNUNG_KM]
+        if not nah:
+            weit = h_sota.nearest(self.summits, *koord, limit=1)
+            return h_az.render_kein_gipfel(weit[0]["_d"] if weit else None)
+
+        letzte: str | None = None
+        for gipfel in nah:
+            ref = gipfel["ref"]
+            if ref in self.cache_az:
+                ringe = self.cache_az[ref]
+            else:
+                try:
+                    ringe = await h_az.fetch_zone(self.http, ref)
+                except h_az.KeineZone:
+                    letzte = letzte or h_az.render_keine_zone(gipfel)
+                    continue
+                except Exception:
+                    return "AZ: SOTLAS nicht erreichbar"
+                self.cache_az[ref] = ringe
+            urteil = h_az.bewerte(gipfel, koord, ringe)
+            if urteil["drin"]:
+                return h_az.render(urteil)
+            # Kein Treffer: das naechstgelegene NEIN ist die beste Auskunft,
+            # falls auch die weiteren Gipfel nichts liefern.
+            letzte = letzte or h_az.render(urteil)
+        return letzte or h_az.render_kein_gipfel(None)
 
     async def cmd_relais(self, arg: str, sender: str) -> str | None:
         teile = arg.split(maxsplit=1)
@@ -426,6 +469,7 @@ class Bot:
         "vorhersage": "!vorhersage <ort|lat lon> Spanne, Regen und Boeen der naechsten 24h",
         "uwz": "!uwz [ort|lat lon] amtliche Warnungen der Gemeinde. Ohne Angabe ganz Kaernten",
         "sota": "!sota <ref> Gipfeldaten. !sota <lat lon> naechster Gipfel. !spot wer ist QRV",
+        "az": "!az <lat lon> stehst du in der SOTA-Aktivierungszone? Polygon von SOTLAS",
         "spot": "!spot [assoc] wer gerade auf einem Gipfel funkt, Vorgabe OE",
         "relais": "!relais <2m|70cm|23cm> [ort|lat lon] naechste Relais",
         "sonne": "!sonne [ort|lat lon] Auf-, Untergang, Daemmerung",
@@ -448,7 +492,7 @@ class Bot:
     # Gruppen fuer die zweite Hilfestufe. Die Reihenfolge ist die der Uebersicht.
     GRUPPEN = {
         "wetter": ["wx", "vorhersage", "uwz", "lawine"],
-        "berg": ["sota", "spot", "sonne", "mond"],
+        "berg": ["sota", "az", "spot", "sonne", "mond"],
         "standort": ["sicht", "hoehe", "dist", "qth"],
         "netz": ["netz", "wo", "relais", "ping"],
         "sonst": ["dx", "iss", "zeit", "melde"],

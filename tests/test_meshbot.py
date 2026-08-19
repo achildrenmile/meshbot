@@ -19,6 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from meshbot.config import Settings  # noqa: E402
 from meshbot.formatting import clamp, prepare, transliterate  # noqa: E402
 from meshbot.main import Bot  # noqa: E402
+from meshbot.handlers import az as h_az  # noqa: E402
 from meshbot.handlers import lawine as h_lawine  # noqa: E402
 from meshbot.handlers import melde as h_melde  # noqa: E402
 from meshbot.handlers import qth as h_qth  # noqa: E402
@@ -227,6 +228,142 @@ def test_wx_ortsaufloesung_toleriert_tippfehler():
     stations = {"villach": {"station_id": "1", "lat": 46.6, "lon": 13.8}}
     treffer = h_wx.resolve_place("vilach", stations, "villach")
     assert treffer is not None and treffer[0] == "villach"
+
+
+# --- SOTA-Aktivierungszone -------------------------------------------------
+
+# Quadrat mit 0,01 Grad Kantenlaenge, rund 1,1 km x 0,76 km bei 46,9 Grad.
+QUADRAT = [[(46.900, 13.850), (46.910, 13.850), (46.910, 13.860), (46.900, 13.860)]]
+# Loch in der Mitte: als zweiter Ring, so wie GPX es liefert.
+MIT_LOCH = QUADRAT + [[(46.904, 13.854), (46.906, 13.854), (46.906, 13.856), (46.904, 13.856)]]
+
+
+def test_az_url_ersetzt_nur_den_ersten_bindestrich():
+    assert h_az.az_url("OE/KT-048") == "https://az.sotl.as/OE/KT/048.gpx"
+
+
+@pytest.mark.parametrize("punkt,erwartet", [
+    ((46.905, 13.855), True),      # Mitte
+    ((46.9005, 13.8505), True),    # knapp innerhalb der Ecke
+    ((46.899, 13.855), False),     # suedlich davor
+    ((46.905, 13.861), False),     # oestlich daneben
+])
+def test_az_punkt_in_polygon(punkt, erwartet):
+    assert h_az.innerhalb(punkt, QUADRAT) is erwartet
+
+
+def test_az_loch_zaehlt_als_draussen():
+    """Even-odd ueber alle Ringe: Wer im Loch steht, kreuzt zwei Raender und
+    ist damit ausserhalb der Zone — genau wie im Gelaende."""
+    assert h_az.innerhalb((46.905, 13.855), MIT_LOCH) is False
+    assert h_az.innerhalb((46.902, 13.852), MIT_LOCH) is True   # im Ring, nicht im Loch
+
+
+def test_az_abstand_zum_rand_stimmt_in_metern():
+    """0,001 Grad Breite sind rund 111 m. Zehn Prozent Toleranz, damit die
+    ebene Naeherung nicht als Fehler durchgeht."""
+    m = h_az.abstand_rand_m((46.901, 13.855), QUADRAT)
+    assert 100 < m < 122
+
+
+class _AzClient:
+    """SOTLAS, das ein GPX mit einem Ring liefert — oder 404."""
+
+    def __init__(self, ringe=QUADRAT, status=200) -> None:
+        self.ringe, self.status, self.urls = ringe, status, []
+
+    async def get(self, url, **kw):
+        self.urls.append(url)
+        segs = "".join(
+            "<trkseg>" + "".join(f'<trkpt lat="{a}" lon="{b}"></trkpt>' for a, b in ring) + "</trkseg>"
+            for ring in self.ringe
+        )
+        text = f"<gpx><trk>{segs}</trk></gpx>"
+        status = self.status
+
+        class Resp:
+            status_code = status
+            def raise_for_status(self):
+                if status >= 400:
+                    raise RuntimeError(status)
+            @property
+            def text(self): return text
+        return Resp()
+
+
+def test_az_fetch_liest_ringe_aus_gpx():
+    ringe = run(h_az.fetch_zone(_AzClient(MIT_LOCH), "OE/KT-048"))
+    assert len(ringe) == 2 and len(ringe[0]) == 4
+
+
+def test_az_fetch_ohne_polygon_wirft():
+    with pytest.raises(h_az.KeineZone):
+        run(h_az.fetch_zone(_AzClient(status=404), "OE/KT-999"))
+
+
+def test_az_befehl_braucht_koordinaten(settings):
+    b = Bot(settings)
+    assert run(b.cmd_az("", "x")).startswith("!az <lat lon>")
+
+
+def test_az_meldet_treffer_mit_randabstand(settings, monkeypatch):
+    b = Bot(settings)
+    b.summits = [{"ref": "OE/KT-048", "name": "Rinsennock", "alt": 2334, "pts": 10,
+                  "lat": 46.905, "lon": 13.855, "akt": 63}]
+    monkeypatch.setattr(h_az, "fetch_zone", lambda c, ref: _zone())
+    antwort = run(b.cmd_az("46.905 13.855", "x"))
+    assert antwort.startswith("AZ OE/KT-048 Rinsennock 2334m: JA")
+    assert "bis zum Rand" in antwort
+
+
+def test_az_meldet_ausserhalb_mit_entfernung(settings, monkeypatch):
+    b = Bot(settings)
+    b.summits = [{"ref": "OE/KT-048", "name": "Rinsennock", "alt": 2334, "pts": 10,
+                  "lat": 46.905, "lon": 13.855, "akt": 63}]
+    monkeypatch.setattr(h_az, "fetch_zone", lambda c, ref: _zone())
+    antwort = run(b.cmd_az("46.895 13.855", "x"))
+    assert "NEIN" in antwort and "bis zur Zone" in antwort
+
+
+def test_az_ohne_gipfel_in_der_naehe(settings, monkeypatch):
+    b = Bot(settings)
+    b.summits = [{"ref": "OE/KT-048", "name": "Rinsennock", "alt": 2334, "pts": 10,
+                  "lat": 46.905, "lon": 13.855, "akt": 63}]
+    antwort = run(b.cmd_az("46.60 13.86", "x"))
+    assert antwort.startswith("AZ: kein")
+
+
+def test_az_ohne_polygon_erfindet_keine_zone(settings, monkeypatch):
+    """Lieber eine Absage als eine selbst gerechnete Zone: Am Grat ist eine
+    Schaetzung aus dem 25-m-Modell genau dort falsch, wo es darauf ankommt."""
+    b = Bot(settings)
+    b.summits = [{"ref": "OE/KT-999", "name": "Testberg", "alt": 2000, "pts": 8,
+                  "lat": 46.905, "lon": 13.855, "akt": 1}]
+
+    async def keine(client, ref):
+        raise h_az.KeineZone(ref)
+    monkeypatch.setattr(h_az, "fetch_zone", keine)
+    antwort = run(b.cmd_az("46.905 13.855", "x"))
+    assert "kein Polygon bei SOTLAS" in antwort and "1975m" in antwort
+
+
+def test_az_zonenpolygon_wird_gecacht(settings, monkeypatch):
+    b = Bot(settings)
+    b.summits = [{"ref": "OE/KT-048", "name": "Rinsennock", "alt": 2334, "pts": 10,
+                  "lat": 46.905, "lon": 13.855, "akt": 63}]
+    rufe = []
+
+    async def zaehlend(client, ref):
+        rufe.append(ref)
+        return QUADRAT
+    monkeypatch.setattr(h_az, "fetch_zone", zaehlend)
+    run(b.cmd_az("46.905 13.855", "x"))
+    run(b.cmd_az("46.9051 13.8551", "x"))
+    assert rufe == ["OE/KT-048"]
+
+
+async def _zone():
+    return QUADRAT
 
 
 def test_uwz_leer():

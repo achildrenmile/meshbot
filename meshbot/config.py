@@ -77,6 +77,7 @@ class Settings(BaseSettings):
     cache_ttl_dx_s: int = 900
     cache_ttl_tle_s: int = 21600           # TLE altern langsam, 6h reicht
     cache_ttl_gelaende_s: int = 604800     # Berge bewegen sich nicht
+    cache_ttl_az_s: int = 2592000          # SOTLAS-Zonenpolygone, 30 Tage
 
     geosphere_tawes_url: str = (
         "https://dataset.api.hub.geosphere.at/v1/station/current/tawes-v1-10min"

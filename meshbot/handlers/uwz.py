@@ -6,6 +6,13 @@ amtliche Warnung kommt ohnehin von der GeoSphere.
 
 Abgefragt werden mehrere Punkte in Kärnten, weil die API gemeindeweise
 antwortet — ein einzelner Punkt würde eine Warnung im Nachbartal übersehen.
+
+Wer einen Ort oder eine Position mitschickt, bekommt stattdessen genau seine
+Gemeinde:
+
+    !uwz                  -> Übersicht über vier Landesteile
+    !uwz 46.60 13.67      -> nur die Gemeinde an dieser Position
+    !uwz waidegg          -> dasselbe über das Ortsverzeichnis von `!wx`
 """
 
 from __future__ import annotations
@@ -74,13 +81,53 @@ async def fetch(client: httpx.AsyncClient, url: str) -> list[dict[str, Any]]:
     return list(treffer.values())
 
 
-def render(warnungen: list[dict[str, Any]], stale: bool = False) -> str:
+def parse_warnungen(daten: dict[str, Any]) -> list[dict[str, Any]]:
+    """Warnungsliste einer API-Antwort in die interne Form bringen."""
+    eintraege = []
+    for w in daten.get("properties", {}).get("warnings", []):
+        p = w.get("properties", {})
+        eintraege.append({
+            "stufe": p.get("warnstufeid"),
+            "typ": p.get("warntypid"),
+            "ende": p.get("end"),
+            "gebiete": [],          # bei einer Position steht das Gebiet vorne
+        })
+    return eintraege
+
+
+async def fetch_punkt(client: httpx.AsyncClient, url: str, lat: float, lon: float
+                      ) -> tuple[str, list[dict[str, Any]]]:
+    """Warnungen fuer genau eine Position — Gemeindename und Warnungen.
+
+    Anders als `fetch` wird hier jeder Fehler durchgereicht: Bei einem einzigen
+    Abfragepunkt gibt es keine Teilabdeckung, die man retten koennte. Ohne
+    Antwort gibt es keine Aussage, und keine Aussage ist keine Entwarnung.
+    """
+    resp = await client.get(url, params={"lat": lat, "lon": lon, "lang": "de"})
+    resp.raise_for_status()
+    daten = resp.json()
+    ort = ((daten.get("properties", {}).get("location") or {}).get("properties") or {}).get("name")
+    return ort or f"{lat:.3f},{lon:.3f}", parse_warnungen(daten)
+
+
+def render_unbekannt(arg: str) -> str:
+    """Ort steht nicht im Verzeichnis.
+
+    Anders als `!wx` ohne Spott: Wer nach einer Warnung fragt, soll einen Weg
+    bekommen statt eine Pointe. Die Position funktioniert immer, auch fuer
+    Almen und Gipfel, die in keinem Ortsverzeichnis stehen.
+    """
+    ort = " ".join(arg.split())[:20] or "?"
+    return f"UWZ: {ort} unbekannt. Position geht immer: !uwz 46.61 13.85"
+
+
+def render(warnungen: list[dict[str, Any]], stale: bool = False, ort: str = "KTN") -> str:
     marker = "~" if stale else ""
     if not warnungen:
         # Auch die Entwarnung braucht das Alterszeichen. Sonst sieht ein Stand
         # von vor zwei Stunden aus wie eine frische Entwarnung -- und genau da
         # ist der Unterschied am wichtigsten.
-        return f"UWZ KTN: {marker}keine Warnungen aktiv"
+        return f"UWZ {ort}: {marker}keine Warnungen aktiv"
 
     def rang(w: dict[str, Any]) -> int:
         return -(w.get("stufe") or 0)
@@ -89,13 +136,20 @@ def render(warnungen: list[dict[str, Any]], stale: bool = False) -> str:
     for w in sorted(warnungen, key=rang):
         stufe = STUFE.get(w.get("stufe") or 0, "WARN")
         typ = TYP.get(w.get("typ") or 0, "Warnung")
-        gebiete = w["gebiete"][0] if len(w["gebiete"]) < 3 else "KTN weit"
+        # Bei einer Ortsabfrage steht das Gebiet schon vorne im Kopf — in der
+        # Klammer bleibt dann nur die Uhrzeit, statt den Namen zu wiederholen.
+        klammer = []
+        if w["gebiete"]:
+            klammer.append(w["gebiete"][0] if len(w["gebiete"]) < 3 else "KTN weit")
         ende = (w.get("ende") or "").split(" ")[-1][:5]
-        teil = f"{stufe} {typ} ({gebiete}"
-        teil += f" bis {ende})" if ende else ")"
+        if ende:
+            klammer.append(f"bis {ende}")
+        teil = f"{stufe} {typ}"
+        if klammer:
+            teil += " (" + " ".join(klammer) + ")"
         teile.append(teil)
     # Zwei Warnungen passen in eine Nachricht, drei nicht mehr zuverlaessig.
-    text = f"UWZ KTN: {marker}" + ", ".join(teile[:2])
+    text = f"UWZ {ort}: {marker}" + ", ".join(teile[:2])
     if len(teile) > 2:
         text += f" +{len(teile) - 2} weitere"
     return text

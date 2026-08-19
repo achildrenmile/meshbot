@@ -278,6 +278,154 @@ def test_uwz_faellt_auf_den_letzten_wert_zurueck(settings, monkeypatch):
     assert run(b.cmd_uwz("", "x")) == "UWZ KTN: ~keine Warnungen aktiv"
 
 
+class _UwzPunktClient:
+    """Warn-API fuer eine Position: liefert Gemeindename und Warnungen."""
+
+    def __init__(self, ort: str = "Noetsch im Gailtal", warnungen: list | None = None,
+                 kaputt: bool = False) -> None:
+        self.ort, self.warnungen, self.kaputt = ort, warnungen or [], kaputt
+        self.params: list[dict] = []
+
+    async def get(self, url, params=None):
+        self.params.append(params or {})
+        if self.kaputt:
+            raise ConnectionError("Quelle weg")
+        daten = {"properties": {
+            "location": {"properties": {"name": self.ort}},
+            "warnings": self.warnungen,
+        }}
+
+        class Resp:
+            def raise_for_status(self): pass
+            def json(self): return daten
+        return Resp()
+
+
+def test_uwz_punkt_nennt_die_gemeinde():
+    """Mit Position steht die Gemeinde im Kopf statt "KTN" — das ist der ganze
+    Grund fuer die Positionsangabe."""
+    warnungen = [{"properties": {"warnstufeid": 1, "warntypid": 5,
+                                 "end": "20.08.2026 22:00"}}]
+    client = _UwzPunktClient(warnungen=warnungen)
+    ort, treffer = run(h_uwz.fetch_punkt(client, "http://warn.test", 46.5886, 13.6208))
+    assert ort == "Noetsch im Gailtal"
+    assert client.params[0]["lat"] == 46.5886 and client.params[0]["lon"] == 13.6208
+    # Gebiet steht vorne, in der Klammer bleibt nur die Uhrzeit.
+    assert h_uwz.render(treffer, ort=ort) == "UWZ Noetsch im Gailtal: GELB Gewitter (bis 22:00)"
+
+
+def test_uwz_punkt_ohne_warnung_entwarnt_nur_fuer_diese_gemeinde():
+    client = _UwzPunktClient(ort="Klagenfurt")
+    ort, treffer = run(h_uwz.fetch_punkt(client, "http://warn.test", 46.62, 14.31))
+    assert h_uwz.render(treffer, ort=ort) == "UWZ Klagenfurt: keine Warnungen aktiv"
+
+
+def test_uwz_punkt_reicht_den_fehler_durch():
+    """Ein einzelner Punkt kennt keine Teilabdeckung: keine Antwort, keine
+    Aussage. Stillschweigend eine leere Liste zurueckzugeben waere eine
+    erfundene Entwarnung."""
+    with pytest.raises(Exception):
+        run(h_uwz.fetch_punkt(_UwzPunktClient(kaputt=True), "http://warn.test", 46.6, 13.6))
+
+
+def test_uwz_punkt_faellt_auf_den_letzten_wert_zurueck(settings, monkeypatch):
+    b = Bot(settings)
+
+    async def kaputt(*a, **k):
+        raise ConnectionError("Testausfall")
+    monkeypatch.setattr(h_uwz, "fetch_punkt", kaputt)
+    monkeypatch.setattr(b.settings, "http_retries", 0)
+
+    assert run(b.cmd_uwz("46.5886 13.6208", "x")) == "UWZ: Quelle nicht erreichbar"
+    b.stale["uwz:46.59,13.62"] = ("Noetsch im Gailtal", [])
+    assert run(b.cmd_uwz("46.5886 13.6208", "x")) == "UWZ Noetsch im Gailtal: ~keine Warnungen aktiv"
+
+
+def test_uwz_ohne_position_bleibt_die_landesuebersicht(settings, monkeypatch):
+    """Die Positionsabfrage darf den alten Weg nicht verdraengen — ohne
+    Koordinaten weiter die vier Punkte."""
+    b = Bot(settings)
+    gerufen = []
+
+    async def fake_fetch(client, url):
+        gerufen.append(url)
+        return []
+    monkeypatch.setattr(h_uwz, "fetch", fake_fetch)
+
+    assert run(b.cmd_uwz("", "x")) == "UWZ KTN: keine Warnungen aktiv"
+    assert len(gerufen) == 1
+
+
+def test_uwz_ortsname_fragt_die_ortskoordinate_ab(settings, monkeypatch):
+    """Noetsch misst in Bad Bleiberg — das ist eine andere Gemeinde. Gefragt
+    werden muss die Koordinate des Ortes, sonst kommt die Warnung des
+    Nachbartals zurueck."""
+    b = Bot(settings)
+    rufe = []
+
+    async def fake_punkt(client, url, lat, lon):
+        rufe.append((lat, lon))
+        return "Noetsch im Gailtal", []
+    monkeypatch.setattr(h_uwz, "fetch_punkt", fake_punkt)
+
+    run(b.cmd_uwz("noetsch", "x"))
+    ort = b.stations["orte"]["noetsch"]
+    assert rufe == [(ort["lat"], ort["lon"])]
+
+
+def test_uwz_ortsname_nennt_die_gemeinde_dazu(settings, monkeypatch):
+    """Waidegg liegt in der Gemeinde Kirchbach. Wer "waidegg" tippt, muss
+    beides sehen — sonst wirkt die Antwort wie eine Warnung fuer einen
+    fremden Ort."""
+    b = Bot(settings)
+
+    async def fake_punkt(client, url, lat, lon):
+        return "Kirchbach", []
+    monkeypatch.setattr(h_uwz, "fetch_punkt", fake_punkt)
+
+    assert run(b.cmd_uwz("waidegg", "x")) == "UWZ Waidegg (Kirchbach): keine Warnungen aktiv"
+
+
+@pytest.mark.parametrize("gefragt,gemeinde,kopf", [
+    ("villach", "Villach", "Villach"),                       # gleicher Name
+    ("noetsch", "Nötsch im Gailtal", "Nötsch im Gailtal"),   # Gemeinde ist laenger
+    ("klagenfurt", "Klagenfurt am Wörthersee", "Klagenfurt am Wörthersee"),
+])
+def test_uwz_ortsname_ohne_doppelung(settings, monkeypatch, gefragt, gemeinde, kopf):
+    """Steckt der gefragte Name schon vorne in der Gemeinde, ist die Klammer
+    nur Ballast — und Ballast kostet hier Sendezeit."""
+    b = Bot(settings)
+
+    async def fake_punkt(client, url, lat, lon):
+        return gemeinde, []
+    monkeypatch.setattr(h_uwz, "fetch_punkt", fake_punkt)
+
+    assert run(b.cmd_uwz(gefragt, "x")) == f"UWZ {kopf}: keine Warnungen aktiv"
+
+
+def test_uwz_unbekannter_ort_zeigt_den_weg(settings):
+    b = Bot(settings)
+    antwort = run(b.cmd_uwz("xyzabc", "x"))
+    assert antwort.startswith("UWZ: xyzabc unbekannt")
+    assert "!uwz 46.61 13.85" in antwort
+
+
+def test_uwz_punkt_cache_rundet_auf_die_gemeinde(settings, monkeypatch):
+    """Zwei Handpositionen 200 m auseinander liegen in derselben Gemeinde und
+    duerfen nicht zwei Abfragen ausloesen."""
+    b = Bot(settings)
+    rufe = []
+
+    async def fake_punkt(client, url, lat, lon):
+        rufe.append((lat, lon))
+        return "Noetsch im Gailtal", []
+    monkeypatch.setattr(h_uwz, "fetch_punkt", fake_punkt)
+
+    run(b.cmd_uwz("46.5886 13.6208", "x"))
+    run(b.cmd_uwz("46.5891 13.6203", "x"))
+    assert len(rufe) == 1
+
+
 def test_uwz_sortiert_nach_stufe_und_kuerzt():
     warnungen = [
         {"stufe": 1, "typ": 2, "ende": "16.08.2026 18:00", "gebiete": ["Gailtal"]},

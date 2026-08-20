@@ -586,6 +586,11 @@ class Bot:
         """
         daten = h_quota.parse(raw)
         if daten is not None:
+            # Protokolliert, damit im Betrieb nachweisbar ist, dass die
+            # Meldung ankommt: Bleibt sie aus, sagt !quota "Gate meldet
+            # nichts" -- und das sieht von aussen genauso aus wie ein
+            # verweigertes Abo oder ein falsches Topic.
+            log.info("quota", **{k: daten.get(k) for k in ("used", "remaining", "limit")})
             self.quota = daten
 
     async def run(self) -> None:

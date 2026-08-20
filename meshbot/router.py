@@ -158,6 +158,13 @@ class Router:
             return None
         name, argument = befehl
 
+        # Ab hier steht fest, dass ein Befehl fuer uns hereingekommen ist. Ohne
+        # diese Zeile ist im Nachhinein nicht unterscheidbar, ob eine Anfrage
+        # nie ankam oder ob die Antwort auf dem Rueckweg verlorenging -- beides
+        # sieht im Log gleich aus, naemlich nach gar nichts.
+        log.info("befehl", sender=eingang.sender, cmd=name,
+                 arg=argument[:24], kanal=eingang.channel)
+
         if self.dedup.is_duplicate(eingang.sender, eingang.text):
             log.info("duplikat", sender=eingang.sender, cmd=name)
             return None

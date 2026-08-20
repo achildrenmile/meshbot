@@ -20,10 +20,12 @@ log = structlog.get_logger(__name__)
 class MqttClient:
     def __init__(self, settings: Settings,
                  on_message: Callable[[bytes], Awaitable[None]],
-                 on_admin: Callable[[bytes], None]) -> None:
+                 on_admin: Callable[[bytes], None],
+                 on_quota: Callable[[bytes], None] | None = None) -> None:
         self.settings = settings
         self._on_message = on_message
         self._on_admin = on_admin
+        self._on_quota = on_quota
         self._loop: asyncio.AbstractEventLoop | None = None
         self.connected = False
 
@@ -62,6 +64,8 @@ class MqttClient:
         self.connected = True
         client.subscribe(self.settings.topic_rx, qos=0)
         client.subscribe(self.settings.topic_admin, qos=1)
+        if self._on_quota is not None:
+            client.subscribe(self.settings.topic_quota, qos=1)
         log.info("mqtt_verbunden", rx=self.settings.topic_rx, admin=self.settings.topic_admin)
 
     def _handle_disconnect(self, client: Any, userdata: Any, flags: Any, rc: Any, properties: Any = None) -> None:
@@ -71,6 +75,9 @@ class MqttClient:
     def _handle_message(self, client: Any, userdata: Any, msg: mqtt.MQTTMessage) -> None:
         if msg.topic == self.settings.topic_admin:
             self._on_admin(msg.payload)
+            return
+        if self._on_quota is not None and msg.topic == self.settings.topic_quota:
+            self._on_quota(msg.payload)
             return
         if self._loop is None:
             return

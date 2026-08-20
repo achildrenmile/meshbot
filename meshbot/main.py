@@ -17,6 +17,7 @@ from .handlers import az as h_az
 from .handlers import dx as h_dx
 from .handlers import geo as h_geo
 from .handlers import iss as h_iss
+from .handlers import quota as h_quota
 from .handlers import lawine as h_lawine
 from .handlers import mond as h_mond
 from .handlers import melde as h_melde
@@ -66,9 +67,12 @@ class Bot:
             "wo": self.cmd_wo, "melde": self.cmd_melde, "qth": self.cmd_qth,
             "sicht": self.cmd_sicht, "hoehe": self.cmd_hoehe, "dist": self.cmd_dist,
             "dx": self.cmd_dx, "mond": self.cmd_mond, "iss": self.cmd_iss,
-            "az": self.cmd_az,
+            "az": self.cmd_az, "quota": self.cmd_quota,
         })
-        self.mqtt = MqttClient(settings, on_message=self.on_message, on_admin=self.on_admin)
+        # Letzter Kontingentstand des Gates. Kommt retained beim Abonnieren.
+        self.quota: dict[str, Any] | None = None
+        self.mqtt = MqttClient(settings, on_message=self.on_message,
+                               on_admin=self.on_admin, on_quota=self.on_quota)
 
     # --- Befehle ---------------------------------------------------------
 
@@ -231,6 +235,19 @@ class Bot:
             # falls auch die weiteren Gipfel nichts liefern.
             letzte = letzte or h_az.render(urteil)
         return letzte or h_az.render_kein_gipfel(None)
+
+    async def cmd_quota(self, arg: str, sender: str) -> str:
+        """Wie viele Sendungen gehen noch — Gate und Bot nebeneinander.
+
+        `verfuegbar()` statt `allow()`: Nachsehen darf nichts verbrauchen. Die
+        Antwort selbst kostet trotzdem eine Sendung, und das steht in ihr drin.
+        """
+        return h_quota.render(
+            self.quota,
+            self.router.global_bucket.verfuegbar(),
+            self.settings.global_limit,
+            self.settings.global_window_s,
+        )
 
     async def cmd_relais(self, arg: str, sender: str) -> str | None:
         teile = arg.split(maxsplit=1)
@@ -477,6 +494,7 @@ class Bot:
         "netz": "!netz Zustand des Mesh: aktive Repeater und Verkehr",
         "zeit": "!zeit UTC und Epoch-Sekunden, fuer Uhren am Node",
         "ping": "!ping Lebenszeichen des Bots, taugt auch als Reichweitentest",
+        "quota": "!quota wie viele Sendungen diese Stunde noch gehen. Aliase !kontingent !rest",
         "help": "!help zeigt alle Befehle, !help <cmd> die Einzelheiten",
         "wo": "!wo <name> Position, Verkehr und letzter Empfang eines Knotens",
         "melde": "!melde <was, wo> Luecke oder Stoerung melden, Position mitschicken",
@@ -494,7 +512,7 @@ class Bot:
         "wetter": ["wx", "vorhersage", "uwz", "lawine"],
         "berg": ["sota", "az", "spot", "sonne", "mond"],
         "standort": ["sicht", "hoehe", "dist", "qth"],
-        "netz": ["netz", "wo", "relais", "ping"],
+        "netz": ["netz", "wo", "relais", "ping", "quota"],
         "sonst": ["dx", "iss", "zeit", "melde"],
     }
 
@@ -558,6 +576,17 @@ class Bot:
         elif befehl in ("resume", "start", "on"):
             self.router.enabled = True
             log.warning("bot_fortgesetzt")
+
+    def on_quota(self, raw: bytes) -> None:
+        """Kontingentstand des Gates mitschreiben. Laeuft im paho-Thread.
+
+        Unbrauchbare Meldungen werden ignoriert statt den alten Wert zu
+        loeschen: ein veralteter Stand ist mehr wert als gar keiner, und die
+        Antwort sagt ohnehin, woher die Zahl kommt.
+        """
+        daten = h_quota.parse(raw)
+        if daten is not None:
+            self.quota = daten
 
     async def run(self) -> None:
         stop = asyncio.Event()

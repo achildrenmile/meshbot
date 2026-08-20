@@ -24,13 +24,24 @@ class TokenBucket:
         self._tokens = float(self.limit)
         self._last = time.monotonic()
 
-    def allow(self, now: float | None = None) -> bool:
-        now = time.monotonic() if now is None else now
+    def _nachfuellen(self, now: float) -> None:
         # Nie negativ: Der Aufrufer kann einen Zeitstempel mitgeben, der vor der
         # Erzeugung des Buckets liegt — dann waere die erste Freigabe verloren.
         elapsed = max(0.0, now - self._last)
         self._last = max(now, self._last)
         self._tokens = min(float(self.limit), self._tokens + elapsed * self.limit / self.window)
+
+    def verfuegbar(self, now: float | None = None) -> int:
+        """Wie viele Freigaben gerade da sind, **ohne** eine zu verbrauchen.
+
+        Fuer `!kontingent`: Nachsehen darf nicht dasselbe kosten wie Senden.
+        """
+        self._nachfuellen(time.monotonic() if now is None else now)
+        return int(self._tokens)
+
+    def allow(self, now: float | None = None) -> bool:
+        now = time.monotonic() if now is None else now
+        self._nachfuellen(now)
         if self._tokens >= 1.0:
             self._tokens -= 1.0
             return True

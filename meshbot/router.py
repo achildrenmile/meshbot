@@ -52,6 +52,7 @@ ALIASES = {
     "dx": "dx", "solar": "dx", "bedingungen": "dx",
     "mond": "mond", "moon": "mond",
     "az": "az", "sotaaz": "az", "zone": "az", "gipfelzone": "az", "aktivierungszone": "az",
+    "quota": "quota", "kontingent": "quota", "rest": "quota",
     "iss": "iss", "sat": "iss",
 }
 

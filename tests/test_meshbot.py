@@ -20,6 +20,7 @@ from meshbot.config import Settings  # noqa: E402
 from meshbot.formatting import clamp, prepare, transliterate  # noqa: E402
 from meshbot.main import Bot  # noqa: E402
 from meshbot.handlers import az as h_az  # noqa: E402
+from meshbot.handlers import quota as h_quota  # noqa: E402
 from meshbot.handlers import lawine as h_lawine  # noqa: E402
 from meshbot.handlers import melde as h_melde  # noqa: E402
 from meshbot.handlers import qth as h_qth  # noqa: E402
@@ -228,6 +229,61 @@ def test_wx_ortsaufloesung_toleriert_tippfehler():
     stations = {"villach": {"station_id": "1", "lat": 46.6, "lon": 13.8}}
     treffer = h_wx.resolve_place("vilach", stations, "villach")
     assert treffer is not None and treffer[0] == "villach"
+
+
+# --- Kontingent ------------------------------------------------------------
+
+def test_kontingent_nachsehen_verbraucht_nichts():
+    """Der Kern des Befehls: Wer nachsieht, wie viel noch geht, darf dadurch
+    nicht weniger uebrig haben."""
+    b = TokenBucket(3, 60)
+    assert b.verfuegbar() == 3
+    assert b.verfuegbar() == 3
+    assert b.allow() is True
+    assert b.verfuegbar() == 2
+
+
+def test_kontingent_liest_die_gate_meldung():
+    d = h_quota.parse(b'{"limit":12,"used":5,"remaining":7,"frei_in_s":0,"fenster_s":3600}')
+    assert d["remaining"] == 7
+    assert h_quota.parse(b"kein json") is None
+    assert h_quota.parse(b'{"etwas":1}') is None      # ohne remaining wertlos
+
+
+def test_kontingent_nennt_beide_bremsen():
+    text = h_quota.render({"limit": 12, "used": 5, "remaining": 7, "fenster_s": 3600},
+                               9, 12, 600)
+    assert "7/12 pro 1h00 frei" in text
+    assert "Bot 9/12 pro 10min" in text
+    # Die Antwort geht selbst durchs Gate -- wer '7 frei' liest, hat 6.
+    assert "inkl. dieser Antwort" in text
+
+
+def test_kontingent_voll_nennt_die_wartezeit():
+    text = h_quota.render({"limit": 12, "used": 12, "remaining": 0,
+                                "frei_in_s": 1770, "fenster_s": 3600}, 9, 12, 600)
+    assert "0/12" in text and "voll" in text and "29min" in text
+
+
+def test_kontingent_ohne_gate_meldung_erfindet_nichts():
+    text = h_quota.render(None, 9, 12, 600)
+    assert "Gate meldet nichts" in text and "Bot 9/12" in text
+
+
+def test_kontingent_behaelt_den_alten_wert_bei_muell(settings):
+    """Ein veralteter Stand ist mehr wert als gar keiner."""
+    b = Bot(settings)
+    b.on_quota(b'{"limit":12,"used":1,"remaining":11}')
+    b.on_quota(b"kaputt")
+    assert b.quota["remaining"] == 11
+
+
+def test_kontingent_befehl_geht_ueber_den_router(settings):
+    b = Bot(settings)
+    b.on_quota(b'{"limit":12,"used":2,"remaining":10,"fenster_s":3600}')
+    for alias in ("!kontingent", "!quota", "!rest"):
+        assert parse_command(alias)[0] == "quota"
+    assert "10/12" in run(b.cmd_quota("", "x"))
 
 
 # --- SOTA-Aktivierungszone -------------------------------------------------

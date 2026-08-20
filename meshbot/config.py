@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     topic_rx: str = "meshinfra/message/channel/3"
     topic_tx: str = "meshinfra/tx/chan"
     topic_admin: str = "meshinfra/bot/admin"
+    # Das Gate veroeffentlicht seinen Kontingentstand retained -- beim
+    # Abonnieren liegt der letzte Wert also sofort an, ohne Nachfrage.
+    topic_quota: str = "meshinfra/gate/quota"
 
     # --- Nutzlastformat ---
     payload_format: str = "json"          # json | text

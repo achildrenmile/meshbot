@@ -32,7 +32,10 @@ class Eingang:
 
 ALIASES = {
     "wx": "wx", "wetter": "wx",
-    "uwz": "uwz", "warn": "uwz",
+    "warn": "warn", "warnung": "warn",
+    # Altlast: der Befehl hiess bis August 2026 !uwz. Bleibt als Eingabe
+    # erhalten, taucht aber in Hilfe und Antworten nicht mehr auf.
+    "uwz": "warn",
     "sota": "sota", "summit": "sota",
     "relais": "relais", "rpt": "relais",
     "ping": "ping",

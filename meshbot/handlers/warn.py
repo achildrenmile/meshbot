@@ -1,8 +1,14 @@
-"""!uwz — amtliche Wetterwarnungen.
+"""!warn — amtliche Wetterwarnungen.
 
 Quelle: GeoSphere Austria Warn-API (`warnungen.zamg.at/wsapp/api`), Endpunkt
-`getWarningsForCoords`. uwz.at selbst hat keine offene Schnittstelle; die
-amtliche Warnung kommt ohnehin von der GeoSphere.
+`getWarningsForCoords`, CC BY 4.0.
+
+Der Befehl hiess bis August 2026 `!uwz` und die Antworten begannen mit
+`UWZ`. Das war falsch beschriftet: Die Unwetterzentrale (uwz.at) ist ein
+privater Dienst der UBIMET und hat mit diesen Daten nichts zu tun --
+amtlich warnt in Oesterreich die GeoSphere. Ein fremder Markenname ueber
+fremden Daten ist keine Kleinigkeit, deshalb heisst beides jetzt `WARN`.
+`!uwz` bleibt als Eingabe erhalten, damit niemand ins Leere tippt.
 
 Abgefragt werden mehrere Punkte in Kärnten, weil die API gemeindeweise
 antwortet — ein einzelner Punkt würde eine Warnung im Nachbartal übersehen.
@@ -10,9 +16,9 @@ antwortet — ein einzelner Punkt würde eine Warnung im Nachbartal übersehen.
 Wer einen Ort oder eine Position mitschickt, bekommt stattdessen genau seine
 Gemeinde:
 
-    !uwz                  -> Übersicht über vier Landesteile
-    !uwz 46.60 13.67      -> nur die Gemeinde an dieser Position
-    !uwz waidegg          -> dasselbe über das Ortsverzeichnis von `!wx`
+    !warn                 -> Übersicht über vier Landesteile
+    !warn 46.60 13.67     -> nur die Gemeinde an dieser Position
+    !warn waidegg         -> dasselbe über das Ortsverzeichnis von `!wx`
 """
 
 from __future__ import annotations
@@ -118,7 +124,7 @@ def render_unbekannt(arg: str) -> str:
     Almen und Gipfel, die in keinem Ortsverzeichnis stehen.
     """
     ort = " ".join(arg.split())[:20] or "?"
-    return f"UWZ: {ort} unbekannt. Position geht immer: !uwz 46.61 13.85"
+    return f"WARN: {ort} unbekannt. Position geht immer: !warn 46.61 13.85"
 
 
 def render(warnungen: list[dict[str, Any]], stale: bool = False, ort: str = "KTN") -> str:
@@ -127,7 +133,7 @@ def render(warnungen: list[dict[str, Any]], stale: bool = False, ort: str = "KTN
         # Auch die Entwarnung braucht das Alterszeichen. Sonst sieht ein Stand
         # von vor zwei Stunden aus wie eine frische Entwarnung -- und genau da
         # ist der Unterschied am wichtigsten.
-        return f"UWZ {ort}: {marker}keine Warnungen aktiv"
+        return f"WARN {ort}: {marker}keine Warnungen aktiv"
 
     def rang(w: dict[str, Any]) -> int:
         return -(w.get("stufe") or 0)
@@ -149,7 +155,7 @@ def render(warnungen: list[dict[str, Any]], stale: bool = False, ort: str = "KTN
             teil += " (" + " ".join(klammer) + ")"
         teile.append(teil)
     # Zwei Warnungen passen in eine Nachricht, drei nicht mehr zuverlaessig.
-    text = f"UWZ {ort}: {marker}" + ", ".join(teile[:2])
+    text = f"WARN {ort}: {marker}" + ", ".join(teile[:2])
     if len(teile) > 2:
         text += f" +{len(teile) - 2} weitere"
     return text

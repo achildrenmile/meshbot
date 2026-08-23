@@ -31,7 +31,7 @@ from meshbot.handlers import sonne as h_sonne  # noqa: E402
 from meshbot.handlers import spot as h_spot  # noqa: E402
 from meshbot.handlers import vorhersage as h_fc  # noqa: E402
 from meshbot.handlers import sota as h_sota  # noqa: E402
-from meshbot.handlers import uwz as h_uwz  # noqa: E402
+from meshbot.handlers import warn as h_warn  # noqa: E402
 from meshbot.handlers import wx as h_wx  # noqa: E402
 from meshbot.ratelimit import Deduplicator, SenderLimiter, TokenBucket  # noqa: E402
 from meshbot.router import Router, dig, parse_command, parse_payload, split_sender_prefix  # noqa: E402
@@ -83,8 +83,8 @@ def test_prepare_kombiniert_beides():
 @pytest.mark.parametrize("text,erwartet", [
     ("!wx villach", ("wx", "villach")),
     ("!WETTER Klagenfurt", ("wx", "Klagenfurt")),
-    ("!uwz", ("uwz", "")),
-    ("!warn", ("uwz", "")),
+    ("!warn", ("warn", "")),
+    ("!uwz", ("warn", "")),      # Altname, bleibt als Eingabe
     ("!sota oe/kt-048", ("sota", "oe/kt-048")),
     ("!rpt 2m villach", ("relais", "2m villach")),
     ("!hilfe", ("help", "")),
@@ -430,8 +430,8 @@ async def _zone():
     return QUADRAT
 
 
-def test_uwz_leer():
-    assert h_uwz.render([]) == "UWZ KTN: keine Warnungen aktiv"
+def test_warn_leer():
+    assert h_warn.render([]) == "WARN KTN: keine Warnungen aktiv"
 
 
 class _UwzClient:
@@ -452,31 +452,31 @@ class _UwzClient:
         return Resp()
 
 
-def test_uwz_meldet_ausfall_statt_entwarnung():
+def test_warn_meldet_ausfall_statt_entwarnung():
     """Faellt die Warn-API komplett aus, darf der Bot nicht "keine Warnungen"
     funken. Schweigen ist keine Entwarnung -- das waere die gefaehrlichste
     Falschaussage, die ein Warndienst machen kann."""
-    with pytest.raises(h_uwz.QuelleNichtErreichbar):
-        run(h_uwz.fetch(_UwzClient(ok=0), "http://warn.test"))
+    with pytest.raises(h_warn.QuelleNichtErreichbar):
+        run(h_warn.fetch(_UwzClient(ok=0), "http://warn.test"))
 
 
-def test_uwz_ein_erreichter_punkt_genuegt():
+def test_warn_ein_erreichter_punkt_genuegt():
     """Ein Ausfall einzelner Punkte macht die Antwort unvollstaendig, nicht
     falsch — dafuer wird nicht der ganze Befehl abgewuergt."""
-    assert run(h_uwz.fetch(_UwzClient(ok=1), "http://warn.test")) == []
+    assert run(h_warn.fetch(_UwzClient(ok=1), "http://warn.test")) == []
 
 
-def test_uwz_faellt_auf_den_letzten_wert_zurueck(settings, monkeypatch):
+def test_warn_faellt_auf_den_letzten_wert_zurueck(settings, monkeypatch):
     """Bei Ausfall kommt der letzte bekannte Stand mit ~, sonst eine ehrliche
     Absage — beides ist besser als eine erfundene Entwarnung."""
     b = Bot(settings)
     async def kaputt(*a, **k):
-        raise h_uwz.QuelleNichtErreichbar("Testausfall")
-    monkeypatch.setattr(h_uwz, "fetch", kaputt)
+        raise h_warn.QuelleNichtErreichbar("Testausfall")
+    monkeypatch.setattr(h_warn, "fetch", kaputt)
 
-    assert run(b.cmd_uwz("", "x")) == "UWZ: Quelle nicht erreichbar"
-    b.stale["uwz"] = []
-    assert run(b.cmd_uwz("", "x")) == "UWZ KTN: ~keine Warnungen aktiv"
+    assert run(b.cmd_warn("", "x")) == "WARN: Quelle nicht erreichbar"
+    b.stale["warn"] = []
+    assert run(b.cmd_warn("", "x")) == "WARN KTN: ~keine Warnungen aktiv"
 
 
 class _UwzPunktClient:
@@ -502,47 +502,47 @@ class _UwzPunktClient:
         return Resp()
 
 
-def test_uwz_punkt_nennt_die_gemeinde():
+def test_warn_punkt_nennt_die_gemeinde():
     """Mit Position steht die Gemeinde im Kopf statt "KTN" — das ist der ganze
     Grund fuer die Positionsangabe."""
     warnungen = [{"properties": {"warnstufeid": 1, "warntypid": 5,
                                  "end": "20.08.2026 22:00"}}]
     client = _UwzPunktClient(warnungen=warnungen)
-    ort, treffer = run(h_uwz.fetch_punkt(client, "http://warn.test", 46.5886, 13.6208))
+    ort, treffer = run(h_warn.fetch_punkt(client, "http://warn.test", 46.5886, 13.6208))
     assert ort == "Noetsch im Gailtal"
     assert client.params[0]["lat"] == 46.5886 and client.params[0]["lon"] == 13.6208
     # Gebiet steht vorne, in der Klammer bleibt nur die Uhrzeit.
-    assert h_uwz.render(treffer, ort=ort) == "UWZ Noetsch im Gailtal: GELB Gewitter (bis 22:00)"
+    assert h_warn.render(treffer, ort=ort) == "WARN Noetsch im Gailtal: GELB Gewitter (bis 22:00)"
 
 
-def test_uwz_punkt_ohne_warnung_entwarnt_nur_fuer_diese_gemeinde():
+def test_warn_punkt_ohne_warnung_entwarnt_nur_fuer_diese_gemeinde():
     client = _UwzPunktClient(ort="Klagenfurt")
-    ort, treffer = run(h_uwz.fetch_punkt(client, "http://warn.test", 46.62, 14.31))
-    assert h_uwz.render(treffer, ort=ort) == "UWZ Klagenfurt: keine Warnungen aktiv"
+    ort, treffer = run(h_warn.fetch_punkt(client, "http://warn.test", 46.62, 14.31))
+    assert h_warn.render(treffer, ort=ort) == "WARN Klagenfurt: keine Warnungen aktiv"
 
 
-def test_uwz_punkt_reicht_den_fehler_durch():
+def test_warn_punkt_reicht_den_fehler_durch():
     """Ein einzelner Punkt kennt keine Teilabdeckung: keine Antwort, keine
     Aussage. Stillschweigend eine leere Liste zurueckzugeben waere eine
     erfundene Entwarnung."""
     with pytest.raises(Exception):
-        run(h_uwz.fetch_punkt(_UwzPunktClient(kaputt=True), "http://warn.test", 46.6, 13.6))
+        run(h_warn.fetch_punkt(_UwzPunktClient(kaputt=True), "http://warn.test", 46.6, 13.6))
 
 
-def test_uwz_punkt_faellt_auf_den_letzten_wert_zurueck(settings, monkeypatch):
+def test_warn_punkt_faellt_auf_den_letzten_wert_zurueck(settings, monkeypatch):
     b = Bot(settings)
 
     async def kaputt(*a, **k):
         raise ConnectionError("Testausfall")
-    monkeypatch.setattr(h_uwz, "fetch_punkt", kaputt)
+    monkeypatch.setattr(h_warn, "fetch_punkt", kaputt)
     monkeypatch.setattr(b.settings, "http_retries", 0)
 
-    assert run(b.cmd_uwz("46.5886 13.6208", "x")) == "UWZ: Quelle nicht erreichbar"
-    b.stale["uwz:46.59,13.62"] = ("Noetsch im Gailtal", [])
-    assert run(b.cmd_uwz("46.5886 13.6208", "x")) == "UWZ Noetsch im Gailtal: ~keine Warnungen aktiv"
+    assert run(b.cmd_warn("46.5886 13.6208", "x")) == "WARN: Quelle nicht erreichbar"
+    b.stale["warn:46.59,13.62"] = ("Noetsch im Gailtal", [])
+    assert run(b.cmd_warn("46.5886 13.6208", "x")) == "WARN Noetsch im Gailtal: ~keine Warnungen aktiv"
 
 
-def test_uwz_ohne_position_bleibt_die_landesuebersicht(settings, monkeypatch):
+def test_warn_ohne_position_bleibt_die_landesuebersicht(settings, monkeypatch):
     """Die Positionsabfrage darf den alten Weg nicht verdraengen — ohne
     Koordinaten weiter die vier Punkte."""
     b = Bot(settings)
@@ -551,13 +551,13 @@ def test_uwz_ohne_position_bleibt_die_landesuebersicht(settings, monkeypatch):
     async def fake_fetch(client, url):
         gerufen.append(url)
         return []
-    monkeypatch.setattr(h_uwz, "fetch", fake_fetch)
+    monkeypatch.setattr(h_warn, "fetch", fake_fetch)
 
-    assert run(b.cmd_uwz("", "x")) == "UWZ KTN: keine Warnungen aktiv"
+    assert run(b.cmd_warn("", "x")) == "WARN KTN: keine Warnungen aktiv"
     assert len(gerufen) == 1
 
 
-def test_uwz_ortsname_fragt_die_ortskoordinate_ab(settings, monkeypatch):
+def test_warn_ortsname_fragt_die_ortskoordinate_ab(settings, monkeypatch):
     """Noetsch misst in Bad Bleiberg — das ist eine andere Gemeinde. Gefragt
     werden muss die Koordinate des Ortes, sonst kommt die Warnung des
     Nachbartals zurueck."""
@@ -567,14 +567,14 @@ def test_uwz_ortsname_fragt_die_ortskoordinate_ab(settings, monkeypatch):
     async def fake_punkt(client, url, lat, lon):
         rufe.append((lat, lon))
         return "Noetsch im Gailtal", []
-    monkeypatch.setattr(h_uwz, "fetch_punkt", fake_punkt)
+    monkeypatch.setattr(h_warn, "fetch_punkt", fake_punkt)
 
-    run(b.cmd_uwz("noetsch", "x"))
+    run(b.cmd_warn("noetsch", "x"))
     ort = b.stations["orte"]["noetsch"]
     assert rufe == [(ort["lat"], ort["lon"])]
 
 
-def test_uwz_ortsname_nennt_die_gemeinde_dazu(settings, monkeypatch):
+def test_warn_ortsname_nennt_die_gemeinde_dazu(settings, monkeypatch):
     """Waidegg liegt in der Gemeinde Kirchbach. Wer "waidegg" tippt, muss
     beides sehen — sonst wirkt die Antwort wie eine Warnung fuer einen
     fremden Ort."""
@@ -582,9 +582,9 @@ def test_uwz_ortsname_nennt_die_gemeinde_dazu(settings, monkeypatch):
 
     async def fake_punkt(client, url, lat, lon):
         return "Kirchbach", []
-    monkeypatch.setattr(h_uwz, "fetch_punkt", fake_punkt)
+    monkeypatch.setattr(h_warn, "fetch_punkt", fake_punkt)
 
-    assert run(b.cmd_uwz("waidegg", "x")) == "UWZ Waidegg (Kirchbach): keine Warnungen aktiv"
+    assert run(b.cmd_warn("waidegg", "x")) == "WARN Waidegg (Kirchbach): keine Warnungen aktiv"
 
 
 @pytest.mark.parametrize("gefragt,gemeinde,kopf", [
@@ -592,26 +592,26 @@ def test_uwz_ortsname_nennt_die_gemeinde_dazu(settings, monkeypatch):
     ("noetsch", "Nötsch im Gailtal", "Nötsch im Gailtal"),   # Gemeinde ist laenger
     ("klagenfurt", "Klagenfurt am Wörthersee", "Klagenfurt am Wörthersee"),
 ])
-def test_uwz_ortsname_ohne_doppelung(settings, monkeypatch, gefragt, gemeinde, kopf):
+def test_warn_ortsname_ohne_doppelung(settings, monkeypatch, gefragt, gemeinde, kopf):
     """Steckt der gefragte Name schon vorne in der Gemeinde, ist die Klammer
     nur Ballast — und Ballast kostet hier Sendezeit."""
     b = Bot(settings)
 
     async def fake_punkt(client, url, lat, lon):
         return gemeinde, []
-    monkeypatch.setattr(h_uwz, "fetch_punkt", fake_punkt)
+    monkeypatch.setattr(h_warn, "fetch_punkt", fake_punkt)
 
-    assert run(b.cmd_uwz(gefragt, "x")) == f"UWZ {kopf}: keine Warnungen aktiv"
+    assert run(b.cmd_warn(gefragt, "x")) == f"WARN {kopf}: keine Warnungen aktiv"
 
 
-def test_uwz_unbekannter_ort_zeigt_den_weg(settings):
+def test_warn_unbekannter_ort_zeigt_den_weg(settings):
     b = Bot(settings)
-    antwort = run(b.cmd_uwz("xyzabc", "x"))
-    assert antwort.startswith("UWZ: xyzabc unbekannt")
-    assert "!uwz 46.61 13.85" in antwort
+    antwort = run(b.cmd_warn("xyzabc", "x"))
+    assert antwort.startswith("WARN: xyzabc unbekannt")
+    assert "!warn 46.61 13.85" in antwort
 
 
-def test_uwz_punkt_cache_rundet_auf_die_gemeinde(settings, monkeypatch):
+def test_warn_punkt_cache_rundet_auf_die_gemeinde(settings, monkeypatch):
     """Zwei Handpositionen 200 m auseinander liegen in derselben Gemeinde und
     duerfen nicht zwei Abfragen ausloesen."""
     b = Bot(settings)
@@ -620,21 +620,21 @@ def test_uwz_punkt_cache_rundet_auf_die_gemeinde(settings, monkeypatch):
     async def fake_punkt(client, url, lat, lon):
         rufe.append((lat, lon))
         return "Noetsch im Gailtal", []
-    monkeypatch.setattr(h_uwz, "fetch_punkt", fake_punkt)
+    monkeypatch.setattr(h_warn, "fetch_punkt", fake_punkt)
 
-    run(b.cmd_uwz("46.5886 13.6208", "x"))
-    run(b.cmd_uwz("46.5891 13.6203", "x"))
+    run(b.cmd_warn("46.5886 13.6208", "x"))
+    run(b.cmd_warn("46.5891 13.6203", "x"))
     assert len(rufe) == 1
 
 
-def test_uwz_sortiert_nach_stufe_und_kuerzt():
+def test_warn_sortiert_nach_stufe_und_kuerzt():
     warnungen = [
         {"stufe": 1, "typ": 2, "ende": "16.08.2026 18:00", "gebiete": ["Gailtal"]},
         {"stufe": 2, "typ": 1, "ende": "16.08.2026 20:00", "gebiete": ["Oberkaernten"]},
         {"stufe": 1, "typ": 5, "ende": "", "gebiete": ["Lavanttal"]},
         {"stufe": 1, "typ": 6, "ende": "", "gebiete": ["Zentralraum"]},
     ]
-    text = h_uwz.render(warnungen)
+    text = h_warn.render(warnungen)
     assert text.index("ORANGE") < text.index("GELB")
     assert "+2 weitere" in text          # nur zwei passen in eine Nachricht
     assert len(text) <= 140
@@ -866,7 +866,7 @@ def test_keine_antwort_sprengt_das_zeichenlimit():
 
 @pytest.mark.parametrize("roh", [
     "WX " + "Sehr langer Ortsname " * 20,
-    "UWZ KTN: " + "ORANGE Sturm (Oberkaernten bis 18h), " * 10,
+    "WARN KTN: " + "ORANGE Sturm (Oberkaernten bis 18h), " * 10,
     "2m b. Villach: " + "OE8XKK Dobratsch 145.6875 -0.6 (12km) | " * 8,
     "SOTA OE/KT-048 " + "Name " * 40,
 ])

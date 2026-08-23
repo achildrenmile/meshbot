@@ -70,7 +70,7 @@ class Settings(BaseSettings):
     http_timeout_s: float = 5.0
     http_retries: int = 1
     cache_ttl_wx_s: int = 600
-    cache_ttl_uwz_s: int = 300
+    cache_ttl_warn_s: int = 300
     cache_ttl_sota_s: int = 86400
     cache_ttl_relais_s: int = 86400
     cache_ttl_spot_s: int = 120

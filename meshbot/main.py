@@ -29,7 +29,7 @@ from .handlers import spot as h_spot
 from .handlers import wo as h_wo
 from .handlers import vorhersage as h_fc
 from .handlers import sota as h_sota
-from .handlers import uwz as h_uwz
+from .handlers import warn as h_warn
 from .handlers import wx as h_wx
 from .health import serve_health
 from .mqtt_client import MqttClient
@@ -47,7 +47,7 @@ class Bot:
         self.summits = h_sota.load_summits(settings.summits_file)
         self.cache_wx: TTLCache = TTLCache(maxsize=64, ttl=settings.cache_ttl_wx_s)
         # Platz fuer die Landesuebersicht und die zuletzt abgefragten Positionen.
-        self.cache_uwz: TTLCache = TTLCache(maxsize=32, ttl=settings.cache_ttl_uwz_s)
+        self.cache_warn: TTLCache = TTLCache(maxsize=32, ttl=settings.cache_ttl_warn_s)
         self.cache_sota: TTLCache = TTLCache(maxsize=256, ttl=settings.cache_ttl_sota_s)
         self.cache_spot: TTLCache = TTLCache(maxsize=4, ttl=settings.cache_ttl_spot_s)
         self.cache_lawine: TTLCache = TTLCache(maxsize=4, ttl=settings.cache_ttl_lawine_s)
@@ -60,7 +60,7 @@ class Bot:
         self.cache_az: TTLCache = TTLCache(maxsize=64, ttl=settings.cache_ttl_az_s)
         self.stale: dict[str, Any] = {}          # letzte gute Antwort je Schlüssel
         self.router = Router(settings, {
-            "wx": self.cmd_wx, "uwz": self.cmd_uwz, "sota": self.cmd_sota,
+            "wx": self.cmd_wx, "warn": self.cmd_warn, "sota": self.cmd_sota,
             "relais": self.cmd_relais, "ping": self.cmd_ping, "help": self.cmd_help,
             "sonne": self.cmd_sonne, "spot": self.cmd_spot, "lawine": self.cmd_lawine,
             "netz": self.cmd_netz, "vorhersage": self.cmd_vorhersage, "zeit": self.cmd_zeit,
@@ -99,13 +99,13 @@ class Bot:
         self.stale[f"wx:{sid}"] = werte
         return h_wx.render(ort, werte, station=name)
 
-    async def cmd_uwz(self, arg: str, sender: str) -> str | None:
+    async def cmd_warn(self, arg: str, sender: str) -> str | None:
         # Mit Position: genau die Gemeinde, in der man steht. Die vier festen
         # Punkte sind eine Landesuebersicht — sie sagen, dass irgendwo im
         # Gailtal gewarnt wird, nicht ob es das eigene Tal trifft.
         koord = h_sota.parse_coords(arg)
         if koord is not None:
-            return await self._uwz_punkt(*koord)
+            return await self._warn_punkt(*koord)
 
         # Ortsname ueber dasselbe Verzeichnis wie !wx. Genommen wird die
         # Ortskoordinate, nicht die der Wetterstation: Noetsch misst in Bad
@@ -113,22 +113,22 @@ class Bot:
         if arg.strip():
             treffer = h_wx.resolve_place(arg, self.stations, self.settings.default_location)
             if treffer is None:
-                return h_uwz.render_unbekannt(arg)
+                return h_warn.render_unbekannt(arg)
             ort, eintrag = treffer
-            return await self._uwz_punkt(eintrag["lat"], eintrag["lon"], gefragt=ort)
+            return await self._warn_punkt(eintrag["lat"], eintrag["lon"], gefragt=ort)
 
-        if "aktuell" in self.cache_uwz:
-            return h_uwz.render(self.cache_uwz["aktuell"])
+        if "aktuell" in self.cache_warn:
+            return h_warn.render(self.cache_warn["aktuell"])
         try:
-            warnungen = await h_uwz.fetch(self.http, self.settings.warn_url)
+            warnungen = await h_warn.fetch(self.http, self.settings.warn_url)
         except Exception:
-            alt = self.stale.get("uwz")
-            return h_uwz.render(alt, stale=True) if alt is not None else "UWZ: Quelle nicht erreichbar"
-        self.cache_uwz["aktuell"] = warnungen
-        self.stale["uwz"] = warnungen
-        return h_uwz.render(warnungen)
+            alt = self.stale.get("warn")
+            return h_warn.render(alt, stale=True) if alt is not None else "WARN: Quelle nicht erreichbar"
+        self.cache_warn["aktuell"] = warnungen
+        self.stale["warn"] = warnungen
+        return h_warn.render(warnungen)
 
-    def _uwz_kopf(self, gemeinde: str, gefragt: str | None) -> str:
+    def _warn_kopf(self, gemeinde: str, gefragt: str | None) -> str:
         """Gemeinde dazuschreiben, wenn sie anders heisst als der gefragte Ort.
 
         Waidegg liegt in der Gemeinde Kirchbach — gewarnt wird immer die
@@ -146,7 +146,7 @@ class Bot:
             return gemeinde
         return f"{gefragt.title()} ({gemeinde})"
 
-    async def _uwz_punkt(self, lat: float, lon: float, gefragt: str | None = None) -> str:
+    async def _warn_punkt(self, lat: float, lon: float, gefragt: str | None = None) -> str:
         """Warnungen fuer eine Position, gecacht wie die Landesuebersicht.
 
         Der Cacheschluessel ist auf zwei Stellen gerundet: Die API antwortet
@@ -154,19 +154,19 @@ class Bot:
         Ohne das Runden legt jede Handposition einen eigenen Eintrag an.
         """
         key = f"{lat:.2f},{lon:.2f}"
-        if key in self.cache_uwz:
-            ort, warnungen = self.cache_uwz[key]
-            return h_uwz.render(warnungen, ort=self._uwz_kopf(ort, gefragt))
+        if key in self.cache_warn:
+            ort, warnungen = self.cache_warn[key]
+            return h_warn.render(warnungen, ort=self._warn_kopf(ort, gefragt))
         try:
-            ort, warnungen = await self._mit_retry(h_uwz.fetch_punkt, self.settings.warn_url, lat, lon)
+            ort, warnungen = await self._mit_retry(h_warn.fetch_punkt, self.settings.warn_url, lat, lon)
         except Exception:
-            alt = self.stale.get(f"uwz:{key}")
+            alt = self.stale.get(f"warn:{key}")
             if alt is None:
-                return "UWZ: Quelle nicht erreichbar"
-            return h_uwz.render(alt[1], stale=True, ort=self._uwz_kopf(alt[0], gefragt))
-        self.cache_uwz[key] = (ort, warnungen)
-        self.stale[f"uwz:{key}"] = (ort, warnungen)
-        return h_uwz.render(warnungen, ort=self._uwz_kopf(ort, gefragt))
+                return "WARN: Quelle nicht erreichbar"
+            return h_warn.render(alt[1], stale=True, ort=self._warn_kopf(alt[0], gefragt))
+        self.cache_warn[key] = (ort, warnungen)
+        self.stale[f"warn:{key}"] = (ort, warnungen)
+        return h_warn.render(warnungen, ort=self._warn_kopf(ort, gefragt))
 
     async def cmd_sota(self, arg: str, sender: str) -> str | None:
         # Position statt Referenz: am Gipfel kennt man die Referenz selten,
@@ -484,7 +484,7 @@ class Bot:
     HILFE = {
         "wx": "!wx <ort|lat lon> Wetter der naechsten Station. Tippfehler egal",
         "vorhersage": "!vorhersage <ort|lat lon> Spanne, Regen und Boeen der naechsten 24h",
-        "uwz": "!uwz [ort|lat lon] amtliche Warnungen der Gemeinde. Ohne Angabe ganz Kaernten",
+        "warn": "!warn [ort|lat lon] amtliche Warnungen der Gemeinde (GeoSphere). Ohne Angabe ganz Kaernten",
         "sota": "!sota <ref> Gipfeldaten. !sota <lat lon> naechster Gipfel. !spot wer ist QRV",
         "az": "!az <lat lon> stehst du in der SOTA-Aktivierungszone? Polygon von SOTLAS",
         "spot": "!spot [assoc] wer gerade auf einem Gipfel funkt, Vorgabe OE",
@@ -509,7 +509,7 @@ class Bot:
 
     # Gruppen fuer die zweite Hilfestufe. Die Reihenfolge ist die der Uebersicht.
     GRUPPEN = {
-        "wetter": ["wx", "vorhersage", "uwz", "lawine"],
+        "wetter": ["wx", "vorhersage", "warn", "lawine"],
         "berg": ["sota", "az", "spot", "sonne", "mond"],
         "standort": ["sicht", "hoehe", "dist", "qth"],
         "netz": ["netz", "wo", "relais", "ping", "quota"],

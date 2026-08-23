@@ -84,7 +84,6 @@ def test_prepare_kombiniert_beides():
     ("!wx villach", ("wx", "villach")),
     ("!WETTER Klagenfurt", ("wx", "Klagenfurt")),
     ("!warn", ("warn", "")),
-    ("!uwz", ("warn", "")),      # Altname, bleibt als Eingabe
     ("!sota oe/kt-048", ("sota", "oe/kt-048")),
     ("!rpt 2m villach", ("relais", "2m villach")),
     ("!hilfe", ("help", "")),
@@ -428,6 +427,21 @@ def test_az_zonenpolygon_wird_gecacht(settings, monkeypatch):
 
 async def _zone():
     return QUADRAT
+
+
+def test_veralteter_befehl_zeigt_den_neuen_namen(settings):
+    """Schweigen waere hier die schlechtere Antwort: Wer !uwz aus dem Kanal
+    kennt, haelt den Bot sonst fuer kaputt."""
+    r = router(settings)
+    antwort = run(r.handle(payload("!uwz waidegg")))
+    assert antwort is not None and "!warn" in antwort and "GeoSphere" in antwort
+
+
+def test_veralteter_befehl_unterliegt_denselben_bremsen(settings):
+    """Sonst waere der alte Name der billigste Weg, das Netz zuzufunken."""
+    r = router(settings)
+    assert run(r.handle(payload("!uwz"))) is not None
+    assert run(r.handle(payload("!uwz"))) is None          # Duplikat
 
 
 def test_warn_leer():

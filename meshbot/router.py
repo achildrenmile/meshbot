@@ -33,9 +33,6 @@ class Eingang:
 ALIASES = {
     "wx": "wx", "wetter": "wx",
     "warn": "warn", "warnung": "warn",
-    # Altlast: der Befehl hiess bis August 2026 !uwz. Bleibt als Eingabe
-    # erhalten, taucht aber in Hilfe und Antworten nicht mehr auf.
-    "uwz": "warn",
     "sota": "sota", "summit": "sota",
     "relais": "relais", "rpt": "relais",
     "ping": "ping",
@@ -58,6 +55,23 @@ ALIASES = {
     "quota": "quota", "kontingent": "quota", "rest": "quota",
     "iss": "iss", "sat": "iss",
 }
+
+
+# Umbenannte Befehle. Sie werden nicht mehr ausgefuehrt, sondern beantwortet
+# mit dem Hinweis auf den neuen Namen -- Schweigen waere hier die schlechtere
+# Antwort: Wer den alten Befehl kennt, haelt den Bot sonst fuer kaputt.
+VERALTET = {
+    "uwz": "!uwz heisst jetzt !warn. Gleiche Daten (GeoSphere Austria), neuer Name",
+}
+
+
+def getippter_name(text: str) -> str | None:
+    """Der Befehlsname so, wie er dasteht — vor der Aufloesung ueber ALIASES."""
+    text = text.strip()
+    if not text.startswith("!"):
+        return None
+    teile = text[1:].split(maxsplit=1)
+    return teile[0].lower() if teile else None
 
 
 def dig(data: dict[str, Any], pfad: str) -> Any:
@@ -156,10 +170,11 @@ class Router:
         if self.settings.channel_filter and eingang.channel not in (None, self.settings.channel_filter):
             return None
 
+        getippt = getippter_name(eingang.text)
         befehl = parse_command(eingang.text)
-        if befehl is None:
+        if befehl is None and getippt not in VERALTET:
             return None
-        name, argument = befehl
+        name, argument = befehl if befehl else (getippt, "")
 
         # Ab hier steht fest, dass ein Befehl fuer uns hereingekommen ist. Ohne
         # diese Zeile ist im Nachhinein nicht unterscheidbar, ob eine Anfrage
@@ -177,6 +192,14 @@ class Router:
         if not self.global_bucket.allow():
             log.info("globales_limit", cmd=name)
             return None
+
+        # Alter Name: Hinweis statt Ausfuehrung. Erst hier, damit Duplikate und
+        # Limits auch fuer ihn gelten -- sonst waere er der billigste Weg, das
+        # Netz zuzufunken.
+        if getippt in VERALTET:
+            self.served += 1
+            log.info("veralteter_befehl", cmd=getippt, sender=eingang.sender)
+            return prepare(VERALTET[getippt], self.settings.nutzlimit, self.settings.transliterate)
 
         handler = self.handlers.get(name)
         if handler is None:

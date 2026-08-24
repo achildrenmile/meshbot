@@ -117,3 +117,48 @@ def test_antwort_haelt_das_zeichenlimit():
     for begriff in ("ab", "d733", "beef", "x" * 80):
         text = prepare(h_wo.antwort(lang + NODES, begriff, JETZT), s.nutzlimit, s.transliterate)
         assert len(text) <= s.nutzlimit
+
+
+def test_help_kennt_die_aliase():
+    """Ein veroeffentlichter Alias ohne Hilfe ist eine halbe Auslieferung.
+
+    !pfad steht im Wiki und im README. Wer daraufhin `!help pfad` tippt, darf
+    nicht die allgemeine Uebersicht bekommen.
+    """
+    import asyncio
+
+    from meshbot.main import Bot
+
+    bot = Bot.__new__(Bot)
+    bot.settings = Settings()
+    for alias in ("pfad", "hash", "path", "node", "!pfad", "PFAD"):
+        text = asyncio.run(Bot.cmd_help(bot, alias, "wer"))
+        assert text == Bot.HILFE["wo"], alias
+
+
+def test_help_gruppe_schlaegt_gleichnamigen_alias():
+    """`wetter` ist Alias fuer !wx und Gruppenname. Gemeint ist die Gruppe."""
+    import asyncio
+
+    from meshbot.main import Bot
+
+    bot = Bot.__new__(Bot)
+    bot.settings = Settings()
+    text = asyncio.run(Bot.cmd_help(bot, "wetter", "wer"))
+    assert text.startswith("Wetter: ")
+    assert "!vorhersage" in text
+
+
+def test_uebersicht_hat_noch_luft():
+    """Waechtertest: Die flache Liste ist zwei Zeichen vom Umkippen entfernt.
+
+    Passt sie nicht mehr, faellt !help auf blosse Gruppennamen zurueck -- und
+    das faellt im Betrieb erst auf, wenn es jemandem auffaellt. Schlaegt dieser
+    Test an, ist das kein Fehler, sondern die Entscheidung, wie es weitergeht.
+    """
+    from meshbot.main import Bot
+
+    bot = Bot.__new__(Bot)
+    bot.settings = Settings()
+    alle = [c for gruppe in Bot.GRUPPEN.values() for c in gruppe]
+    assert len(" ".join(alle)) <= bot.settings.nutzlimit

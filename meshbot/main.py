@@ -33,7 +33,7 @@ from .handlers import warn as h_warn
 from .handlers import wx as h_wx
 from .health import serve_health
 from .mqtt_client import MqttClient
-from .router import Router
+from .router import ALIASES, Router
 
 log = structlog.get_logger(__name__)
 
@@ -517,12 +517,22 @@ class Bot:
     }
 
     async def cmd_help(self, arg: str, sender: str) -> str:
-        """Dreistufig: Einzelbefehl, Gruppe, Uebersicht."""
+        """Dreistufig: Einzelbefehl, Gruppe, Uebersicht.
+
+        Aliase werden mitaufgeloest, aber **erst nach den Gruppen**: `wetter`
+        ist beides -- Alias fuer !wx und Name einer Gruppe. Wer `!help wetter`
+        tippt, meint die Gruppe. Ohne diese Reihenfolge fuehrt ein
+        veroeffentlichter Alias wie !pfad ins Leere: Der Befehl antwortet, seine
+        Hilfe nicht.
+        """
         thema = arg.strip().lstrip("!").lower()
         if thema in self.HILFE:
             return self.HILFE[thema]
         if thema in self.GRUPPEN:
             return f"{thema.title()}: " + " ".join("!" + c for c in self.GRUPPEN[thema])
+        ziel = ALIASES.get(thema)
+        if ziel in self.HILFE:
+            return self.HILFE[ziel]
         return self._uebersicht()
 
     def _uebersicht(self) -> str:

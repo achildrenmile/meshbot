@@ -149,16 +149,33 @@ def test_help_gruppe_schlaegt_gleichnamigen_alias():
     assert "!vorhersage" in text
 
 
-def test_uebersicht_hat_noch_luft():
-    """Waechtertest: Die flache Liste ist zwei Zeichen vom Umkippen entfernt.
+@pytest.mark.parametrize("grenze", [100, 116, 140])
+def test_uebersicht_bleibt_brauchbar(grenze):
+    """Bei jeder Zeichengrenze muss !help noch weiterhelfen.
 
-    Passt sie nicht mehr, faellt !help auf blosse Gruppennamen zurueck -- und
-    das faellt im Betrieb erst auf, wenn es jemandem auffaellt. Schlaegt dieser
-    Test an, ist das kein Fehler, sondern die Entscheidung, wie es weitergeht.
+    Seit MAX_MSG_LEN=124 (100 Zeichen fuer den Bot) passt die flache Liste
+    nicht mehr -- 167-Byte-Pakete kamen im Funknetz nicht zuverlaessig an.
+    Die Gruppenform ist damit der Normalfall und muss das auch aushalten:
+    alle Gruppen genannt, Hinweis auf !help <thema>, innerhalb der Grenze.
     """
     from meshbot.main import Bot
 
     bot = Bot.__new__(Bot)
-    bot.settings = Settings()
+    bot.settings = Settings(max_msg_len=grenze + 24)
+    assert bot.settings.nutzlimit == grenze
     alle = [c for gruppe in Bot.GRUPPEN.values() for c in gruppe]
-    assert len(" ".join(alle)) <= bot.settings.nutzlimit
+    text = bot._uebersicht()
+    assert len(text) <= grenze
+    # Entweder jeder Befehl steht drin, oder jede Gruppe -- nie ein Rumpf.
+    vollstaendig = all(c in text for c in alle) or all(g in text for g in Bot.GRUPPEN)
+    assert vollstaendig, text
+
+
+def test_uebersicht_nennt_die_anzahl_wenn_die_liste_nicht_passt():
+    """Fuenf Gruppennamen allein lesen sich wie eine Fehlermeldung."""
+    from meshbot.main import Bot
+
+    bot = Bot.__new__(Bot)
+    bot.settings = Settings(max_msg_len=124)
+    text = bot._uebersicht()
+    assert text.startswith("22 Befehle in 5 Gruppen:")

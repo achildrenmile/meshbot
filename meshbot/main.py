@@ -546,9 +546,16 @@ class Bot:
         alle = [c for gruppe in self.GRUPPEN.values() for c in gruppe]
         grenze = self.settings.nutzlimit
         # Von der schoensten zur kuerzesten Form, erste die passt gewinnt.
+        #
+        # Die Gruppenform ist seit der Senkung auf 100 Zeichen der Normalfall,
+        # nicht mehr die Notbremse -- deshalb nennt sie die Anzahl der Befehle.
+        # Ohne sie liest sie sich wie eine Fehlermeldung: fuenf Woerter, und
+        # nicht erkennbar, dass dahinter zwei Dutzend Befehle stehen.
         for kandidat in (" ".join("!" + c for c in alle) + " | !help <cmd>",
                          " ".join(alle) + " !help <cmd>",
                          " ".join(alle),
+                         f"{len(alle)} Befehle in {len(self.GRUPPEN)} Gruppen: "
+                         + " ".join(self.GRUPPEN) + " | !help <thema>",
                          "Themen: " + " ".join(self.GRUPPEN) + " | !help <thema>"):
             if len(kandidat) <= grenze:
                 return kandidat

@@ -341,7 +341,7 @@ class Bot:
 
     async def cmd_wo(self, arg: str, sender: str) -> str | None:
         if not arg.strip():
-            return "!wo <name> — Zustand eines Knotens"
+            return "!wo <name|hash> — Zustand eines Knotens, Pfad-Hash geht auch"
         jetzt = datetime.now(timezone.utc)
         if "nodes" not in self.cache_netz:
             try:
@@ -353,7 +353,7 @@ class Bot:
                 self.cache_netz["nodes"] = alt
         nodes = self.cache_netz["nodes"]
         self.stale["nodes"] = nodes
-        return h_wo.render(arg, h_wo.suche(nodes, arg), jetzt)
+        return h_wo.antwort(nodes, arg, jetzt)
 
     async def cmd_melde(self, arg: str, sender: str) -> str | None:
         if len(arg.strip()) < 4:
@@ -496,7 +496,7 @@ class Bot:
         "ping": "!ping Lebenszeichen des Bots, taugt auch als Reichweitentest",
         "quota": "!quota wie viele Sendungen diese Stunde noch gehen. Aliase !kontingent !rest",
         "help": "!help zeigt alle Befehle, !help <cmd> die Einzelheiten",
-        "wo": "!wo <name> Position, Verkehr und letzter Empfang eines Knotens",
+        "wo": "!wo <name|hash> Position, Verkehr, letzter Empfang. Auch der Pfad-Hash aus der App, Alias !pfad",
         "melde": "!melde <was, wo> Luecke oder Stoerung melden, Position mitschicken",
         "qth": "!qth <locator|lat lon> Maidenhead in Koordinaten und zurueck",
         "sicht": "!sicht <lat,lon> <lat,lon> Funkstrecke pruefen: frei, knapp oder blockiert",

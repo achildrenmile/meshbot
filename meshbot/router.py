@@ -43,7 +43,7 @@ ALIASES = {
     "netz": "netz", "status": "netz",
     "vorhersage": "vorhersage", "morgen": "vorhersage", "fc": "vorhersage",
     "zeit": "zeit", "time": "zeit", "utc": "zeit",
-    "wo": "wo", "node": "wo",
+    "wo": "wo", "node": "wo", "pfad": "wo", "hash": "wo", "path": "wo",
     "melde": "melde", "luecke": "melde", "report": "melde",
     "qth": "qth", "loc": "qth", "locator": "qth",
     "sicht": "sicht", "los": "sicht", "sichtverbindung": "sicht",

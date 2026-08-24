@@ -36,7 +36,8 @@ weiterer TCP-Client am Node — davon verträgt ein Companion nur zwei.
 | `!spot [assoc]` | `!spots` | `OE8XXX OE/KT-048 14.062 CW 12min` |
 | `!sonne [ort\|lat lon]` | `!sun` | `Sonne: auf 06:04, unter 20:15, dunkel 20:48 (noch 1h03)` |
 | `!netz` | `!status` | `Netz KTN: 29/33 aktiv, Weiterl. 2578/1h 31977/24h, stärkster WO-Pölling (395)` |
-| `!wo <name>` | `!node` | Position, Verkehr und letzter Empfang eines Knotens |
+| `!wo <name\|hash>` | `!node`, `!pfad` | Position, Verkehr und letzter Empfang eines Knotens |
+| `!pfad <hash>` | `!hash`, `!path` | `Pfad d733 = AT-K-Maria Saaler Berg: 46.666,14.344, 963/24h, zuletzt 12h` |
 | `!melde <was, wo>` | `!luecke` | Feldmeldung erfassen, Position optional |
 | `!qth <locator\|lat lon>` | `!loc` | Maidenhead in Koordinaten und zurück |
 | `!sicht <lat,lon> <lat,lon>` | `!los` | `Sicht 18.4km: FREI, Fresnel 100% (enger bei km17.5, 1347m)` |
@@ -153,7 +154,7 @@ zwischen zwei Rasterpunkten verschwinden.
 | `!sicht`, `!hoehe` | OpenTopoData, Modell EU-DEM 25 m | eine Abfrage je Strecke, Ergebnis eine Woche im Cache |
 | `!dx` | hamqsl.com (N0NBH) | Solar- und Ausbreitungsdaten |
 | `!iss` | Bahndaten von Celestrak, Rechnung mit SGP4 | TLE 6 h im Cache, danach mit `~` markiert |
-| `!wo` | Karten-API von map.carinthiamesh.com | |
+| `!wo`, `!pfad` | Karten-API von map.carinthiamesh.com | Hash ist der Anfang des Public Key |
 
 Zwischenspeicher: Wetter 10 min, Warnungen 5 min, SOTA und Relais 24 h. Fällt eine
 Quelle aus, kommt der letzte bekannte Wert mit `~` davor — lieber ein alter Wert

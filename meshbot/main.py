@@ -572,7 +572,12 @@ class Bot:
             gruppe = f"{thema.title()}: " + " ".join("!" + c for c in self.GRUPPEN[thema])
 
         if befehl and gruppe:
-            beides = f"{gruppe} | {befehl}"
+            # Der Befehl steht in der Gruppenliste schon drin -- ihn im
+            # angehaengten Hilfetext ein zweites Mal zu nennen liest sich wie
+            # ein Fehler. Also nur die Erklaerung anhaengen, ohne das "!netz"
+            # davor.
+            erklaerung = befehl[len(f"!{thema} "):] if befehl.startswith(f"!{thema} ") else befehl
+            beides = f"{gruppe} | {erklaerung}"
             return beides if len(beides) <= self.settings.nutzlimit else gruppe
         if gruppe:
             return gruppe

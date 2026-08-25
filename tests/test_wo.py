@@ -194,6 +194,7 @@ def test_help_netz_liefert_gruppe_und_befehl():
     for cmd in Bot.GRUPPEN["netz"]:
         assert "!" + cmd in text
     assert "Zustand des Mesh" in text          # der Befehlstext haengt hinten dran
+    assert text.count("!netz") == 1, text      # aber der Name nur einmal
     assert len(text) <= bot.settings.nutzlimit
 
 

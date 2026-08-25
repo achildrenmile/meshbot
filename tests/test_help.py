@@ -95,7 +95,10 @@ def test_kollision_liefert_gruppe_und_befehl():
     b = bot()
     text = run(b.cmd_help("netz", "x"))
     assert text.startswith("Netz: ")
-    assert b.HILFE["netz"] in text
+    # Erklaerung dahinter, aber der Befehlsname nur einmal: Er steht in der
+    # Gruppenliste schon drin.
+    assert b.HILFE["netz"].removeprefix("!netz ") in text
+    assert text.count("!netz") == 1, text
     assert len(text) <= b.settings.nutzlimit
 
 

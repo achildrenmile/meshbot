@@ -70,3 +70,18 @@ def test_leeres_argument_liefert_den_hinweis(cmd):
 def test_usage_kennt_auch_unbekannte_befehle():
     """Kein Absturz, wenn jemand usage() fuer etwas ohne Eintrag aufruft."""
     assert bot().usage("gibtsnicht") == "!gibtsnicht: Argument fehlt"
+
+
+def test_netz_bleibt_auch_bei_grossen_zahlen_im_limit():
+    """Die Antwort stand bei 99 von 100 Zeichen -- eine Stelle mehr im
+    Tagesverkehr haette den staerksten Repeater abgeschnitten."""
+    from meshbot.handlers import netz as h_netz
+
+    s = Settings()
+    text = h_netz.render({
+        "aktiv_1h": 199, "aktiv_24h": 198, "gesamt": 200,
+        "weiter_1h": 999999, "weiter_24h": 9999999,
+        "top": ("AT-VL-Ein-langer-Repeatername", 999999),
+    })
+    assert len(prepare(text, s.nutzlimit, s.transliterate)) <= s.nutzlimit
+    assert "…" not in prepare(text, s.nutzlimit, s.transliterate), text

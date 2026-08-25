@@ -54,15 +54,22 @@ async def fetch(client: httpx.AsyncClient, basis_url: str) -> dict[str, Any]:
 
 
 def render(w: dict[str, Any], stale: bool = False) -> str:
+    """Kurz halten -- die Antwort stand bei 99 von 100 erlaubten Zeichen.
+
+    Eine Stelle mehr im Tagesverkehr haette gereicht, und der Bot haette den
+    staerksten Repeater hinten abgeschnitten. Deshalb "Pakete" statt
+    "Weiterl.", "top" statt "staerkster" und "24h" statt "24h nur": knapp
+    dreissig Zeichen Luft, ohne dass eine Angabe wegfaellt.
+    """
     marker = "~" if stale else ""
     teile = [f"Netz KTN: {marker}{w['aktiv_1h']}/{w['gesamt']} aktiv"]
     # Der Tageswert kommt nur zur Sprache, wenn er etwas sagt: dass ein Repeater
     # einen ganzen Tag lang stumm war. Solange alle liefern, waere er Fuellsel.
     if w.get("aktiv_24h") is not None and w["aktiv_24h"] < w["gesamt"]:
-        teile[0] += f" (24h nur {w['aktiv_24h']})"
+        teile[0] += f" (24h {w['aktiv_24h']})"
     if w.get("weiter_1h") or w.get("weiter_24h"):
-        teile.append(f"Weiterl. {w.get('weiter_1h', 0)}/1h {w.get('weiter_24h', 0)}/24h")
+        teile.append(f"Pakete {w.get('weiter_1h', 0)}/1h {w.get('weiter_24h', 0)}/24h")
     if w.get("top"):
         name, zahl = w["top"]
-        teile.append(f"stärkster {name.replace('AT-', '')} ({zahl})")
+        teile.append(f"top {name.replace('AT-', '')} ({zahl})")
     return ", ".join(teile)

@@ -982,8 +982,9 @@ def test_netz_nennt_den_tageswert_nur_wenn_er_etwas_sagt():
     """Solange alle Repeater innerhalb eines Tages liefern, ist die Angabe
     Fuellsel. Faellt einer einen ganzen Tag aus, muss sie dastehen."""
     basis = {"aktiv_1h": 31, "gesamt": 33, "weiter_1h": 2533, "weiter_24h": 31865, "top": None}
-    assert "24h nur" not in h_netz.render({**basis, "aktiv_24h": 33})
-    assert "24h nur 30" in h_netz.render({**basis, "aktiv_24h": 30})
+    # "/24h" steht auch im Paketzaehler -- gemeint ist die Klammer dahinter.
+    assert "(24h" not in h_netz.render({**basis, "aktiv_24h": 33})
+    assert "(24h 30)" in h_netz.render({**basis, "aktiv_24h": 30})
 
 
 def test_netz_zaehlt_die_stunde_nicht_den_tag():

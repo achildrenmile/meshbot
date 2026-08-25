@@ -169,6 +169,8 @@ class Bot:
         return h_warn.render(warnungen, ort=self._warn_kopf(ort, gefragt))
 
     async def cmd_sota(self, arg: str, sender: str) -> str | None:
+        if not arg.strip():
+            return self.usage("sota")
         # Position statt Referenz: am Gipfel kennt man die Referenz selten,
         # das Geraet aber die Koordinaten.
         koord = h_sota.parse_coords(arg)
@@ -206,7 +208,7 @@ class Bot:
         """
         koord = h_sota.parse_coords(arg)
         if koord is None:
-            return "!az <lat lon> — liegt die Position in der SOTA-Zone?"
+            return self.usage("az")
 
         nah = [g for g in h_sota.nearest(self.summits, *koord, limit=h_az.MAX_GIPFEL)
                if g["_d"] <= h_az.MAX_ENTFERNUNG_KM]
@@ -253,7 +255,7 @@ class Bot:
         teile = arg.split(maxsplit=1)
         band = (teile[0] if teile else "2m").lower()
         if band not in h_relais.BAENDER:
-            return "Relais: Band 2m, 70cm oder 23cm"
+            return self.usage("relais")
         ort_arg = teile[1] if len(teile) > 1 else self.settings.default_location
 
         # Bei einer Position braucht es keinen Ortsnamen — "hier" ist kuerzer
@@ -341,7 +343,7 @@ class Bot:
 
     async def cmd_wo(self, arg: str, sender: str) -> str | None:
         if not arg.strip():
-            return "!wo <name|hash> — Zustand eines Knotens, Pfad-Hash geht auch"
+            return self.usage("wo")
         jetzt = datetime.now(timezone.utc)
         if "nodes" not in self.cache_netz:
             try:
@@ -357,7 +359,7 @@ class Bot:
 
     async def cmd_melde(self, arg: str, sender: str) -> str | None:
         if len(arg.strip()) < 4:
-            return "!melde <was, wo> — Luecke oder Stoerung melden"
+            return self.usage("melde")
         meldung = h_melde.erfassen(arg, sender, datetime.now(timezone.utc))
         nummer = h_melde.speichern(meldung, self.settings.meldungen_datei)
         # Auch auf MQTT, damit andere Dienste daraus etwas machen koennen.
@@ -371,7 +373,7 @@ class Bot:
             return h_qth.render_koord(*koord)
         loc = arg.strip()
         if not loc:
-            return "!qth <locator|lat lon> — Locator umrechnen"
+            return self.usage("qth")
         return h_qth.render_locator(loc, h_qth.from_locator(loc))
 
     async def cmd_zeit(self, arg: str, sender: str) -> str:
@@ -392,7 +394,7 @@ class Bot:
         """
         punkte = h_geo.parse_punkte(arg, 2)
         if punkte is None:
-            return "!sicht <lat,lon> <lat,lon> — zwei Positionen noetig"
+            return self.usage("sicht")
         a, b = punkte
         dist = h_geo.distanz_km(a, b)
         if dist < 0.2:
@@ -417,7 +419,7 @@ class Bot:
     async def cmd_hoehe(self, arg: str, sender: str) -> str:
         punkte = h_geo.parse_punkte(arg, 1)
         if punkte is None:
-            return "!hoehe <lat,lon> — Gelaendehoehe an einer Position"
+            return self.usage("hoehe")
         p = punkte[0]
         schluessel = f"h:{p[0]:.4f},{p[1]:.4f}"
         if schluessel in self.cache_gelaende:
@@ -433,7 +435,7 @@ class Bot:
         """Reine Rechnung, keine Quelle, keine Wartezeit."""
         punkte = h_geo.parse_punkte(arg, 2)
         if punkte is None:
-            return "!dist <lat,lon> <lat,lon> — Entfernung und Peilung"
+            return self.usage("dist")
         return h_geo.render_dist(*punkte)
 
     # --- Himmel ---------------------------------------------------------
@@ -481,6 +483,30 @@ class Bot:
         ueberflug = await asyncio.to_thread(h_iss.naechster_ueberflug, tle, *koord, jetzt)
         return h_iss.render(ueberflug, self.settings.tz_offset_h, alt)
 
+    # Was ein Befehl braucht, wenn es fehlt -- Aufbau und ein Beispiel zum
+    # Abtippen. Das Beispiel ist der wichtigere Teil: Wer `!sicht` ohne
+    # Argumente tippt, weiss meist nicht, in welchem Format zwei Positionen
+    # erwartet werden, und `<lat,lon>` beantwortet das nicht.
+    #
+    # Format uebrall gleich: "!befehl <was> - z.B. !befehl konkret".
+    USAGE = {
+        "wx": "!wx <ort|lat lon> - z.B. !wx villach",
+        "vorhersage": "!vorhersage <ort|lat lon> - z.B. !vorhersage spittal",
+        "warn": "!warn [ort|lat lon] - ohne Angabe ganz Kaernten, sonst z.B. !warn hermagor",
+        "sota": "!sota <ref|lat lon> - z.B. !sota kt-048 oder !sota 46.60 13.67",
+        "az": "!az <lat lon> - z.B. !az 46.9089,13.8506",
+        "spot": "!spot [assoc] - ohne Angabe OE, sonst z.B. !spot DL",
+        "relais": "!relais <2m|70cm|23cm> [ort] - z.B. !relais 2m villach",
+        "sicht": "!sicht <lat,lon> <lat,lon> - z.B. !sicht 46.60,13.67 46.67,13.89",
+        "hoehe": "!hoehe <lat,lon> - z.B. !hoehe 46.6719,13.8902",
+        "dist": "!dist <lat,lon> <lat,lon> - z.B. !dist 46.60,13.67 46.79,14.96",
+        "qth": "!qth <locator|lat lon> - z.B. !qth JN76hp oder !qth 46.62 13.85",
+        "wo": "!wo <name|hash> - z.B. !wo dobratsch oder !wo d733",
+        "melde": "!melde <was, wo> - z.B. !melde kein Empfang, Bad Bleiberg Ortsmitte",
+        "iss": "!iss [lat lon] - ohne Angabe der Standardort, sonst z.B. !iss 46.62 13.85",
+        "help": "!help [befehl|thema] - z.B. !help sicht oder !help berg",
+    }
+
     HILFE = {
         "wx": "!wx <ort|lat lon> Wetter der naechsten Station. Tippfehler egal",
         "vorhersage": "!vorhersage <ort|lat lon> Spanne, Regen und Boeen der naechsten 24h",
@@ -515,6 +541,16 @@ class Bot:
         "netz": ["netz", "wo", "relais", "ping", "quota"],
         "sonst": ["dx", "iss", "zeit", "melde"],
     }
+
+    def usage(self, cmd: str) -> str:
+        """Was fehlt und wie es aussieht, wenn es da ist.
+
+        Bewusst eine Antwort und kein Schweigen: Ein Befehl, den jemand
+        richtig getippt hat, ist kein Muell -- da fehlt nur ein Argument.
+        Die Sendezeit dafuer ist besser angelegt als eine zweite Runde
+        Raten. Bei einem *unbekannten* Befehl schweigt der Bot weiterhin.
+        """
+        return self.USAGE.get(cmd, f"!{cmd}: Argument fehlt")
 
     async def cmd_help(self, arg: str, sender: str) -> str:
         """Dreistufig: Einzelbefehl, Gruppe, Uebersicht.

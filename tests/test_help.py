@@ -83,9 +83,20 @@ def test_gruppenhilfe_listet_die_gruppe():
     assert "!sicht" in text and "!hoehe" in text and "!dist" in text
 
 
-def test_einzelhilfe_geht_vor_gruppenhilfe():
+def test_kollision_liefert_gruppe_und_befehl():
+    """`netz` ist Befehl UND Gruppe -- die Antwort nennt beides.
+
+    Bis 25.08.2026 gewann hier der Befehl. Das war eine bewusste
+    Entscheidung, hatte aber eine Folge, die niemand wollte: Die Gruppe
+    `netz` war ueber !help ueberhaupt nicht erreichbar, und wer sie suchte,
+    bekam einen Einzeiler ueber !netz. Beides passt in eine Nachricht,
+    also kommt beides.
+    """
     b = bot()
-    assert run(b.cmd_help("netz", "x")) == b.HILFE["netz"]      # !netz ist Befehl und Gruppe
+    text = run(b.cmd_help("netz", "x"))
+    assert text.startswith("Netz: ")
+    assert b.HILFE["netz"] in text
+    assert len(text) <= b.settings.nutzlimit
 
 
 def test_alle_hilfetexte_sind_kurz_genug():

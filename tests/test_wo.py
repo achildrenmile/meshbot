@@ -179,3 +179,32 @@ def test_uebersicht_nennt_die_anzahl_wenn_die_liste_nicht_passt():
     bot.settings = Settings(max_msg_len=124)
     text = bot._uebersicht()
     assert text.startswith("22 Befehle in 5 Gruppen:")
+
+
+def test_help_netz_liefert_gruppe_und_befehl():
+    """`netz` ist Befehl und Gruppe. Vorher gewann der Befehl, die Gruppe war unerreichbar."""
+    import asyncio
+
+    from meshbot.main import Bot
+
+    bot = Bot.__new__(Bot)
+    bot.settings = Settings()
+    text = asyncio.run(Bot.cmd_help(bot, "netz", "wer"))
+    assert text.startswith("Netz: ")
+    for cmd in Bot.GRUPPEN["netz"]:
+        assert "!" + cmd in text
+    assert "Zustand des Mesh" in text          # der Befehlstext haengt hinten dran
+    assert len(text) <= bot.settings.nutzlimit
+
+
+def test_help_kollision_faellt_auf_die_gruppe_zurueck_wenn_es_nicht_passt():
+    """Passt beides nicht in eine Nachricht, gewinnt die Gruppe -- nie ein Rumpf."""
+    import asyncio
+
+    from meshbot.main import Bot
+
+    bot = Bot.__new__(Bot)
+    bot.settings = Settings(max_msg_len=24 + 40)      # nutzlimit 40
+    text = asyncio.run(Bot.cmd_help(bot, "netz", "wer"))
+    assert text.startswith("Netz: ")
+    assert "Zustand des Mesh" not in text

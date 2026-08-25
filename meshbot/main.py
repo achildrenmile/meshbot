@@ -524,12 +524,24 @@ class Bot:
         tippt, meint die Gruppe. Ohne diese Reihenfolge fuehrt ein
         veroeffentlichter Alias wie !pfad ins Leere: Der Befehl antwortet, seine
         Hilfe nicht.
+
+        `netz` ist beides auf andere Weise: ein Befehl **und** eine Gruppe. Wer
+        danach fragt, bekommt beides in einer Nachricht -- vorher gewann der
+        Befehl, und die Gruppe war ueberhaupt nicht erreichbar.
         """
         thema = arg.strip().lstrip("!").lower()
-        if thema in self.HILFE:
-            return self.HILFE[thema]
+        befehl = self.HILFE.get(thema)
+        gruppe = None
         if thema in self.GRUPPEN:
-            return f"{thema.title()}: " + " ".join("!" + c for c in self.GRUPPEN[thema])
+            gruppe = f"{thema.title()}: " + " ".join("!" + c for c in self.GRUPPEN[thema])
+
+        if befehl and gruppe:
+            beides = f"{gruppe} | {befehl}"
+            return beides if len(beides) <= self.settings.nutzlimit else gruppe
+        if gruppe:
+            return gruppe
+        if befehl:
+            return befehl
         ziel = ALIASES.get(thema)
         if ziel in self.HILFE:
             return self.HILFE[ziel]

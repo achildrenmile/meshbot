@@ -67,8 +67,14 @@ def _namensvarianten(name: str) -> list[str]:
     return [v for v in varianten if v]
 
 
-def suche(verzeichnis: dict[str, dict[str, Any]], begriff: str) -> dict[str, Any] | None:
-    """Genau, dann Teilstring, dann Aehnlichkeit."""
+def suche(verzeichnis: dict[str, dict[str, Any]], begriff: str,
+          fuzzy: bool = True) -> dict[str, Any] | None:
+    """Genau, dann Teilstring, dann Aehnlichkeit.
+
+    `fuzzy=False` liefert nur die ersten beiden Stufen. `!wx` fragt damit
+    zweimal: erst nach einem sicheren Bergtreffer, dann -- wenn auch das
+    Ortsverzeichnis nichts Sicheres hatte -- nach einem geratenen.
+    """
     k = normalisiere(begriff)
     if not k:
         return None
@@ -77,8 +83,41 @@ def suche(verzeichnis: dict[str, dict[str, Any]], begriff: str) -> dict[str, Any
     treffer = [g for name, g in verzeichnis.items() if k in name]
     if treffer:
         return max(treffer, key=lambda g: g.get("alt") or 0)
+    if not fuzzy:
+        return None
     nah = get_close_matches(k, list(verzeichnis), n=1, cutoff=0.82)
     return verzeichnis[nah[0]] if nah else None
+
+
+def station_am_gipfel(stationen: list[dict[str, Any]], gipfel: dict[str, Any],
+                      km: float = 3.0, hoehendiff: float = 300.0) -> dict[str, Any] | None:
+    """Steht eine Wetterstation praktisch auf diesem Gipfel?
+
+    Auf ein paar Bergen misst wirklich jemand -- auf dem Dobratsch etwa steht
+    die Station "Villacher Alpe", 200 m vom Gipfelkreuz und 49 m tiefer. Dort
+    ein Modell zu rechnen waere absurd: **Gemessen schlaegt gerechnet.**
+
+    Beide Bedingungen muessen gelten. Naehe allein genuegt nicht -- eine
+    Talstation kann in der Luftlinie nah sein und trotzdem 1500 m tiefer
+    liegen, und dann misst sie ein anderes Wetter.
+    """
+    bester = None
+    for st in stationen:
+        if st.get("hoehe") is None:
+            continue
+        if abs(st["hoehe"] - gipfel["alt"]) > hoehendiff:
+            continue
+        d = _entfernung_km(gipfel["lat"], gipfel["lon"], st["lat"], st["lon"])
+        if d <= km and (bester is None or d < bester[0]):
+            bester = (d, st)
+    return bester[1] if bester else None
+
+
+def _entfernung_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    from math import asin, cos, radians, sin, sqrt
+    la1, lo1, la2, lo2 = map(radians, (lat1, lon1, lat2, lon2))
+    h = sin((la2 - la1) / 2) ** 2 + cos(la1) * cos(la2) * sin((lo2 - lo1) / 2) ** 2
+    return 6371.0 * 2 * asin(sqrt(h))
 
 
 async def fetch(client: httpx.AsyncClient, url: str, gipfel: dict[str, Any]) -> dict[str, Any]:

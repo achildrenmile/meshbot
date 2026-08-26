@@ -83,13 +83,19 @@ def normalisiere(name: str) -> str:
     return " ".join("st" if w == "sankt" else w for w in s.split())
 
 
-def resolve_place(arg: str, stations: dict[str, Any], default: str) -> tuple[str, dict[str, Any]] | None:
+def resolve_place(arg: str, stations: dict[str, Any], default: str,
+                  fuzzy: bool = True) -> tuple[str, dict[str, Any]] | None:
     """Ort oder Position auf eine Station abbilden.
 
     Akzeptiert einen Ortsnamen (mit Tippfehler-Toleranz) oder Koordinaten in
     beliebiger Schreibweise. Bei Koordinaten wird die naechstgelegene Station
     genommen und ihr Name zurueckgegeben — damit sieht der Empfaenger, woher
     die Werte stammen.
+
+    `fuzzy=False` schaltet die Aehnlichkeitssuche ab. Das braucht `!wx`, seit
+    es auch Gipfel kennt: "Hochstein" ist ein Berg, aber auf 0.8 Aehnlichkeit
+    auch der Weiler "Hohenstein". Ein **exakter** Bergtreffer muss vor einem
+    **geratenen** Ortstreffer kommen.
     """
     orte = stations.get("orte", stations)
 
@@ -106,6 +112,8 @@ def resolve_place(arg: str, stations: dict[str, Any], default: str) -> tuple[str
         return key, orte[key]
     # Bei dreitausend Ortsnamen findet eine lockere Schwelle zu jedem Tippfehler
     # irgendeinen Weiler. 0.8 laesst "vilach" durch und "xyz" nicht.
+    if not fuzzy:
+        return None
     treffer = get_close_matches(key, list(orte), n=1, cutoff=0.8)
     if treffer:
         return treffer[0], orte[treffer[0]]

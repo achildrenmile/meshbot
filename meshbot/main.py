@@ -81,10 +81,21 @@ class Bot:
     # --- Befehle ---------------------------------------------------------
 
     async def cmd_wx(self, arg: str, sender: str) -> str | None:
-        treffer = h_wx.resolve_place(arg, self.stations, self.settings.default_location)
+        """Ort vor Berg -- aber Sicheres vor Geratenem.
+
+        Die Reihenfolge ist der ganze Trick. Frueher gewann jeder Ortstreffer,
+        auch ein geratener: "Hochstein" ist ein Berg in Osttirol, aber auf 0.8
+        Aehnlichkeit eben auch der Weiler "Hohenstein". Deshalb zuerst beide
+        Verzeichnisse **exakt**, und erst danach beide mit Tippfehlertoleranz.
+        """
+        treffer = h_wx.resolve_place(arg, self.stations, self.settings.default_location,
+                                     fuzzy=False)
         if treffer is None:
-            # Kein Kaerntner Ort -- vielleicht ein Berg. Das Gipfelverzeichnis
-            # reicht ueber die Grenze, die Wetterstationen tun das nicht.
+            berg = h_berg.suche(self.gipfel_index, arg, fuzzy=False)
+            if berg is not None:
+                return await self._wx_gipfel(berg)
+            treffer = h_wx.resolve_place(arg, self.stations, self.settings.default_location)
+        if treffer is None:
             berg = h_berg.suche(self.gipfel_index, arg)
             if berg is not None:
                 return await self._wx_gipfel(berg)
@@ -114,6 +125,25 @@ class Bot:
         Getrennt gecacht von den Stationswerten: Beide leben zehn Minuten, aber
         der Schluessel ist die SOTA-Referenz und nicht die Stations-ID.
         """
+        # Auf ein paar Bergen misst wirklich jemand. Dann kommt die Messung,
+        # nicht das Modell -- und der Stationsname steht wie ueberall dabei.
+        st = h_berg.station_am_gipfel(self.stations.get("stationen", []), berg)
+        if st is not None:
+            name = h_berg.kurzname(berg["name"])
+            sid = st["id"]
+            if sid in self.cache_wx:
+                return h_wx.render(name, self.cache_wx[sid], station=st["name"])
+            try:
+                werte = await self._mit_retry(h_wx.fetch, self.settings, sid)
+            except Exception:
+                alt = self.stale.get(f"wx:{sid}")
+                if alt is not None:
+                    return h_wx.render(name, alt, stale=True, station=st["name"])
+            else:
+                self.cache_wx[sid] = werte
+                self.stale[f"wx:{sid}"] = werte
+                return h_wx.render(name, werte, station=st["name"])
+
         ref = berg["ref"]
         if ref in self.cache_berg:
             return h_berg.render(berg, self.cache_berg[ref])

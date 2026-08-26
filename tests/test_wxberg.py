@@ -105,3 +105,86 @@ def test_index_nimmt_bei_namensgleichheit_den_hoeheren():
     doppelt = [{"ref": "X/AA-001", "name": "Testberg", "alt": 800, "lat": 46.0, "lon": 13.0},
                {"ref": "X/AA-002", "name": "Testberg", "alt": 2000, "lat": 46.1, "lon": 13.1}]
     assert h_berg.suche(h_berg.index(doppelt), "testberg")["alt"] == 2000
+
+
+# --- Reihenfolge: Sicheres vor Geratenem ---------------------------------
+
+def _bot():
+    from meshbot.handlers import wx as h_wx
+    from meshbot.main import Bot
+    b = Bot.__new__(Bot)
+    b.settings = Settings()
+    b.stations = h_wx.load_stations(b.settings)
+    b.summits = GIPFEL
+    b.gipfel_index = IDX
+    return b
+
+
+def test_exakter_berg_schlaegt_geratenen_ort():
+    """Aus dem Kanal gemeldet: `!wx hochstein` lieferte "Hohenstein St Veit".
+
+    Hochstein ist ein Berg in Osttirol, Hohenstein ein Kaerntner Weiler --
+    und auf 0.8 Aehnlichkeit gewann frueher der Weiler, weil das
+    Ortsverzeichnis zuerst gefragt wurde. Ein Treffer, der genau passt, muss
+    vor einem gewinnen, der nur aehnlich klingt.
+    """
+    from meshbot.handlers import wx as h_wx
+
+    b = _bot()
+    # Ausgangslage: die Aehnlichkeitssuche trifft wirklich den Weiler.
+    geraten = h_wx.resolve_place("hochstein", b.stations, b.settings.default_location)
+    assert geraten is not None and "hohenstein" in geraten[0]
+    # Exakt gefragt kennt ihn das Ortsverzeichnis nicht ...
+    assert h_wx.resolve_place("hochstein", b.stations, b.settings.default_location,
+                              fuzzy=False) is None
+    # ... das Gipfelverzeichnis schon.
+    berg = h_berg.suche(IDX, "hochstein", fuzzy=False)
+    assert berg is not None and berg["name"] == "Hochstein"
+
+
+def test_echter_ort_bleibt_beim_ort():
+    """Villach ist ein Ort und bleibt einer -- gemessen schlaegt gerechnet."""
+    from meshbot.handlers import wx as h_wx
+
+    b = _bot()
+    assert h_wx.resolve_place("villach", b.stations, b.settings.default_location,
+                              fuzzy=False) is not None
+
+
+def test_tippfehler_im_ortsnamen_geht_weiterhin():
+    """`vilach` darf weiterhin Villach finden -- nur eben erst im zweiten Anlauf."""
+    from meshbot.handlers import wx as h_wx
+
+    b = _bot()
+    assert h_wx.resolve_place("vilach", b.stations, b.settings.default_location,
+                              fuzzy=False) is None
+    treffer = h_wx.resolve_place("vilach", b.stations, b.settings.default_location)
+    assert treffer is not None and "villach" in treffer[0]
+
+
+def test_bei_namensgleichheit_gewinnt_der_hoechste_berg():
+    """Hochstein gibt es dreimal: 904 m, 2183 m und 2827 m in Osttirol."""
+    assert h_berg.suche(IDX, "hochstein", fuzzy=False)["alt"] == 2827
+
+
+def test_station_auf_dem_gipfel_schlaegt_das_modell():
+    """Auf dem Dobratsch misst die Station "Villacher Alpe", 200 m vom Gipfel."""
+    from meshbot.handlers import wx as h_wx
+
+    stationen = h_wx.load_stations(Settings()).get("stationen", [])
+    berg = h_berg.suche(IDX, "dobratsch")
+    st = h_berg.station_am_gipfel(stationen, berg)
+    assert st is not None and st["name"] == "Villacher Alpe"
+
+
+def test_talstation_gilt_nicht_als_gipfelstation():
+    """Naehe allein genuegt nicht -- 1500 m tiefer ist anderes Wetter."""
+    berg = {"name": "Testgipfel", "alt": 2500, "lat": 46.6, "lon": 13.7, "ref": "X/AA-001"}
+    tal = [{"id": "1", "name": "Talstation", "lat": 46.6, "lon": 13.7, "hoehe": 600.0}]
+    assert h_berg.station_am_gipfel(tal, berg) is None
+
+
+def test_ferne_station_auf_gleicher_hoehe_gilt_auch_nicht():
+    berg = {"name": "Testgipfel", "alt": 2500, "lat": 46.6, "lon": 13.7, "ref": "X/AA-001"}
+    weit = [{"id": "1", "name": "Anderer Berg", "lat": 47.2, "lon": 13.7, "hoehe": 2480.0}]
+    assert h_berg.station_am_gipfel(weit, berg) is None

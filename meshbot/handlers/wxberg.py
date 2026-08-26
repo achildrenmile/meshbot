@@ -27,8 +27,13 @@ from .wx import normalisiere
 RICHTUNGEN = ("N", "NNO", "NO", "ONO", "O", "OSO", "SO", "SSO",
               "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW")
 
+# Kein Luftdruck. Open-Meteo liefert ihn als `pressure_msl`, also auf
+# Meereshoehe zurueckgerechnet -- auf einem Gipfel ist das kein Messwert von
+# dort, sondern eine Regionalzahl, die ueberall gleich aussieht. Sie kostete
+# neun Zeichen und hat die Antwort ueber 60 Zeichen gehoben, und genau dort
+# faellt die Zustellquote im Funknetz von 92 auf 47 Prozent.
 FELDER = ("temperature_2m", "relative_humidity_2m", "wind_speed_10m",
-          "wind_direction_10m", "pressure_msl")
+          "wind_direction_10m")
 
 
 def index(gipfel: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
@@ -169,6 +174,4 @@ def render(gipfel: dict[str, Any], w: dict[str, Any], stale: bool = False) -> st
         if w.get("wind_direction_10m") is not None:
             wind += " " + RICHTUNGEN[round(w["wind_direction_10m"] / 22.5) % 16]
         werte.append(wind)
-    if w.get("pressure_msl") is not None:
-        werte.append(f"{w['pressure_msl']:.0f}hPa")
     return teile[0] + ", ".join(werte) + " (Modell)"

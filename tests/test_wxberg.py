@@ -188,3 +188,29 @@ def test_ferne_station_auf_gleicher_hoehe_gilt_auch_nicht():
     berg = {"name": "Testgipfel", "alt": 2500, "lat": 46.6, "lon": 13.7, "ref": "X/AA-001"}
     weit = [{"id": "1", "name": "Anderer Berg", "lat": 47.2, "lon": 13.7, "hoehe": 2480.0}]
     assert h_berg.station_am_gipfel(weit, berg) is None
+
+
+# --- Laenge: im Funknetz die halbe Miete ----------------------------------
+
+@pytest.mark.parametrize("frage", ["goldeck", "latschur", "marmolada", "triglav",
+                                   "matterhorn", "grossglockner", "hochstein"])
+def test_gipfelantwort_bleibt_unter_60_zeichen(frage):
+    """Gemessen am 26.08.2026 ueber zwoelf Stunden Funkverkehr:
+
+        bis 59 Zeichen   11 von 12 angekommen   (92 %)
+        ab  60 Zeichen    7 von 15 angekommen   (47 %)
+
+    Die Gipfelantworten lagen mit 60 bis 62 Zeichen genau in der schlechten
+    Klasse. Der Luftdruck ist dafuer geflogen -- als `pressure_msl` war er
+    ohnehin auf Meereshoehe zurueckgerechnet und damit keine Aussage ueber
+    den Gipfel.
+    """
+    s = Settings()
+    g = h_berg.suche(IDX, frage)
+    text = prepare(h_berg.render(g, WERTE), s.nutzlimit, s.transliterate)
+    assert len(text) <= 59, f"{len(text)} Zeichen: {text}"
+
+
+def test_kein_luftdruck_in_der_gipfelantwort():
+    g = h_berg.suche(IDX, "triglav")
+    assert "hPa" not in h_berg.render(g, {**WERTE, "pressure_msl": 1013.0})

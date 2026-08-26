@@ -31,6 +31,7 @@ from .handlers import vorhersage as h_fc
 from .handlers import sota as h_sota
 from .handlers import warn as h_warn
 from .handlers import wx as h_wx
+from .handlers import wxberg as h_berg
 from .health import serve_health
 from .mqtt_client import MqttClient
 from .router import ALIASES, Router
@@ -45,7 +46,10 @@ class Bot:
         self.stations = h_wx.load_stations(settings)
         self.relais = h_relais.load_relais(settings.relais_file)
         self.summits = h_sota.load_summits(settings.summits_file)
+        # Namensverzeichnis der Gipfel, einmal beim Start gebaut.
+        self.gipfel_index = h_berg.index(self.summits)
         self.cache_wx: TTLCache = TTLCache(maxsize=64, ttl=settings.cache_ttl_wx_s)
+        self.cache_berg: TTLCache = TTLCache(maxsize=64, ttl=settings.cache_ttl_wx_s)
         # Platz fuer die Landesuebersicht und die zuletzt abgefragten Positionen.
         self.cache_warn: TTLCache = TTLCache(maxsize=32, ttl=settings.cache_ttl_warn_s)
         self.cache_sota: TTLCache = TTLCache(maxsize=256, ttl=settings.cache_ttl_sota_s)
@@ -79,6 +83,11 @@ class Bot:
     async def cmd_wx(self, arg: str, sender: str) -> str | None:
         treffer = h_wx.resolve_place(arg, self.stations, self.settings.default_location)
         if treffer is None:
+            # Kein Kaerntner Ort -- vielleicht ein Berg. Das Gipfelverzeichnis
+            # reicht ueber die Grenze, die Wetterstationen tun das nicht.
+            berg = h_berg.suche(self.gipfel_index, arg)
+            if berg is not None:
+                return await self._wx_gipfel(berg)
             return h_wx.render_unbekannt(arg)
         ort, station = treffer
         # Der Cache haengt an der Station, nicht am Ortsnamen: dreitausend Orte
@@ -98,6 +107,26 @@ class Bot:
         self.cache_wx[sid] = werte
         self.stale[f"wx:{sid}"] = werte
         return h_wx.render(ort, werte, station=name)
+
+    async def _wx_gipfel(self, berg: dict[str, Any]) -> str:
+        """Modellwetter fuer einen Gipfel.
+
+        Getrennt gecacht von den Stationswerten: Beide leben zehn Minuten, aber
+        der Schluessel ist die SOTA-Referenz und nicht die Stations-ID.
+        """
+        ref = berg["ref"]
+        if ref in self.cache_berg:
+            return h_berg.render(berg, self.cache_berg[ref])
+        try:
+            werte = await self._mit_retry(h_berg.fetch, self.settings.berg_url, berg)
+        except Exception:
+            alt = self.stale.get(f"berg:{ref}")
+            if alt is None:
+                return f"WX {berg['name'][:20]}: Modell nicht erreichbar"
+            return h_berg.render(berg, alt, stale=True)
+        self.cache_berg[ref] = werte
+        self.stale[f"berg:{ref}"] = werte
+        return h_berg.render(berg, werte)
 
     async def cmd_warn(self, arg: str, sender: str) -> str | None:
         # Mit Position: genau die Gemeinde, in der man steht. Die vier festen
@@ -490,7 +519,7 @@ class Bot:
     #
     # Format uebrall gleich: "!befehl <was> - z.B. !befehl konkret".
     USAGE = {
-        "wx": "!wx <ort|lat lon> - z.B. !wx villach",
+        "wx": "!wx <ort|gipfel|lat lon> - z.B. !wx villach oder !wx triglav",
         "vorhersage": "!vorhersage <ort|lat lon> - z.B. !vorhersage spittal",
         "warn": "!warn [ort|lat lon] - ohne Angabe ganz Kaernten, sonst z.B. !warn hermagor",
         "sota": "!sota <ref|lat lon> - z.B. !sota kt-048 oder !sota 46.60 13.67",
@@ -508,7 +537,7 @@ class Bot:
     }
 
     HILFE = {
-        "wx": "!wx <ort|lat lon> Wetter der naechsten Station. Tippfehler egal",
+        "wx": "!wx <ort|gipfel|lat lon> Station in KTN, Gipfelwetter aus dem Modell fuer AT/IT/SI/DE/CH/HR/CZ/SK/HU/PL",
         "vorhersage": "!vorhersage <ort|lat lon> Spanne, Regen und Boeen der naechsten 24h",
         "warn": "!warn [ort|lat lon] amtliche Warnungen der Gemeinde (GeoSphere). Ohne Angabe ganz Kaernten",
         "sota": "!sota <ref> Gipfeldaten. !sota <lat lon> naechster Gipfel. !spot wer ist QRV",

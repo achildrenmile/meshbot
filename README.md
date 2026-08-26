@@ -26,7 +26,8 @@ weiterer TCP-Client am Node — davon verträgt ein Companion nur zwei.
 
 | Befehl | Alias | Antwort |
 |---|---|---|
-| `!wx <ort\|lat lon>` | `!wetter` | `WX Villach: 31.8C, 30%, Wind 14km/h NW, 956hPa` |
+| `!wx <ort\|gipfel\|lat lon>` | `!wetter` | `WX Villach: 31.8C, 32%, Wind 12km/h W, 956hPa` |
+| `!wx <gipfel>` | | `WX Triglav 2864m: 9.0C, 79%, Wind 7km/h WNW, 1022hPa (Modell)` |
 | `!uwz` | `!warn` | `UWZ KTN: GELB Gewitter (Zentralraum bis 22:00) +1 weitere` |
 | `!sota <ref>` | `!summit` | `OE/KT-048 Rinsennock 2334m, 10Pkt` |
 | `!sota <lat> <lon>` | | `OE/KT-072 Villacher Alpe 2166m 8Pkt (88m NW) \| …` |
@@ -140,6 +141,7 @@ zwischen zwei Rasterpunkten verschwinden.
 | Befehl | Quelle | Lizenz / Hinweis |
 |---|---|---|
 | `!wx` | GeoSphere Austria, Datensatz `tawes-v1-10min` | CC BY 4.0, kein Schlüssel nötig |
+| `!wx <gipfel>` | Open-Meteo, auf die Gipfelhoehe gerechnet | 9442 Gipfel aus AT, IT, SI, DE, CH, HR, CZ, SK, HU, PL |
 | `!wx` Ortsnamen | OpenStreetMap, erzeugt mit `tools/build_orte.py` | ODbL, als JSON im Repo, ohne Netz |
 | `!uwz` | GeoSphere Warn-API, `getWarningsForCoords` | vier Abfragepunkte decken Kärnten ab |
 | `!sota` per Referenz | SOTA API v2 | |

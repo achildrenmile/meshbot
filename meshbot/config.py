@@ -92,6 +92,9 @@ class Settings(BaseSettings):
     forecast_url: str = "https://dataset.api.hub.geosphere.at/v1/timeseries/forecast/nwp-v1-1h-2500m"
     map_url: str = "https://map.carinthiamesh.com"
     topo_url: str = "https://api.opentopodata.org/v1/eudem25m"
+    # Gipfelwetter: Modellwerte fuer Berge, wo keine Station steht und wo die
+    # GeoSphere ohnehin endet -- also ausserhalb Oesterreichs.
+    berg_url: str = "https://api.open-meteo.com/v1/forecast"
     hamqsl_url: str = "https://www.hamqsl.com/solarxml.php"
     tle_url: str = "https://celestrak.org/NORAD/elements/gp.php?CATNR=25544&FORMAT=TLE"
 

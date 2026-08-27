@@ -105,13 +105,6 @@ class Settings(BaseSettings):
     sicht_mast_m: float = 3.0
     tz_offset_h: int = 2
     meldungen_datei: Path = Field(default=Path("/data/meldungen.jsonl"))
-    # Zustellmessung: Der Bot hoert seine eigene Antwort ueber das Funknetz
-    # zurueck, wenn ein Repeater sie wiederholt. Bleibt das Echo aus, ist sie
-    # mit hoher Wahrscheinlichkeit nicht angekommen.
-    zustellung_datei: Path = Field(default=Path("/data/zustellung.jsonl"))
-    echo_frist_s: int = Field(default=25, gt=0, description="Wartezeit auf das eigene Echo")
-    # Ein zweiter Versuch, hoechstens einer. 0 schaltet ihn ab.
-    zweitversuche: int = Field(default=1, ge=0, le=1)
     topic_meldung: str = "meshinfra/bot/meldung"
 
     health_port: int = 8080

@@ -34,8 +34,7 @@ from .handlers import wx as h_wx
 from .handlers import wxberg as h_berg
 from .health import serve_health
 from .mqtt_client import MqttClient
-from .router import ALIASES, Router, parse_payload
-from .zustellung import Zustellung
+from .router import ALIASES, Router
 
 log = structlog.get_logger(__name__)
 
@@ -74,11 +73,6 @@ class Bot:
             "dx": self.cmd_dx, "mond": self.cmd_mond, "iss": self.cmd_iss,
             "az": self.cmd_az, "quota": self.cmd_quota,
         })
-        # Zustellmessung: bucht jede Antwort, bis ihr Echo aus dem Funknetz
-        # zurueckkommt oder die Frist ablaeuft.
-        self.zustellung = Zustellung(frist_s=settings.echo_frist_s,
-                                     zweitversuche=settings.zweitversuche,
-                                     datei=settings.zustellung_datei)
         # Letzter Kontingentstand des Gates. Kommt retained beim Abonnieren.
         self.quota: dict[str, Any] | None = None
         self.mqtt = MqttClient(settings, on_message=self.on_message,
@@ -693,51 +687,15 @@ class Bot:
         raise letzter  # type: ignore[misc]
 
     async def on_message(self, raw: bytes) -> None:
-        # Zuerst pruefen, ob das die eigene Antwort ist, die ueber einen
-        # Repeater zurueckkommt. Der Router wirft sie gleich weg -- fuer die
-        # Messung ist sie das Einzige, was einen Zustellerfolg belegt.
-        treffer = self.zustellung.echo(self._rohtext(raw))
-        if treffer is not None:
-            log.info("echo", laenge=treffer.laenge, versuch=treffer.versuch,
-                     **self.zustellung.quote())
-
         antwort = await self.router.handle(raw)
         if antwort is None:
             return
-        log.info("antwort", text=antwort, laenge=len(antwort))
-        self._sende(antwort)
-
-    def _rohtext(self, raw: bytes | str) -> str:
-        eingang = parse_payload(raw, self.settings)
-        return eingang.text if eingang else ""
-
-    def _sende(self, antwort: str, versuch: int = 1) -> None:
         payload = self.settings.tx_template.format(
             channel=self.settings.tx_channel,
             text=antwort.replace('"', "'"),
         )
-        self.zustellung.gesendet(antwort, versuch=versuch)
+        log.info("antwort", text=antwort, laenge=len(antwort))
         self.mqtt.publish(self.settings.topic_tx, payload)
-
-    async def _zustellung_pruefen(self) -> None:
-        """Antworten ohne Echo: einmal wiederholen, dann als verloren buchen.
-
-        Der Zweitversuch laeuft ueber dasselbe Gate wie jede andere Sendung --
-        er kann das Kontingent also nicht umgehen, und bei vollem Netz faellt
-        er einfach aus.
-        """
-        while True:
-            await asyncio.sleep(5)
-            try:
-                for eintrag in self.zustellung.faellig():
-                    if self.zustellung.darf_wiederholen(eintrag):
-                        log.info("kein_echo_wiederhole", laenge=eintrag.laenge)
-                        self._sende(eintrag.text, versuch=eintrag.versuch + 1)
-                    else:
-                        log.info("verloren", laenge=eintrag.laenge,
-                                 **self.zustellung.quote())
-            except Exception as exc:                  # nie den Dienst mitreissen
-                log.exception("zustellung_fehler", error=str(exc))
 
     def on_admin(self, raw: bytes) -> None:
         befehl = raw.decode("utf-8", errors="replace").strip().lower()
@@ -771,10 +729,7 @@ class Bot:
             loop.add_signal_handler(sig, stop.set)
         self.mqtt.start(loop)
         health = asyncio.create_task(serve_health(self.settings, self))
-        messung = asyncio.create_task(self._zustellung_pruefen())
-        log.info("gestartet", echo_frist_s=self.settings.echo_frist_s,
-                 zweitversuche=self.settings.zweitversuche,
-                 rx=self.settings.topic_rx, tx=self.settings.topic_tx,
+        log.info("gestartet", rx=self.settings.topic_rx, tx=self.settings.topic_tx,
                  enabled=self.router.enabled, relais=len(self.relais),
                  orte=len(self.stations.get("orte", {})),
                  stationen=len(self.stations.get("stationen", [])),
@@ -782,7 +737,6 @@ class Bot:
         await stop.wait()
         log.info("beende")
         health.cancel()
-        messung.cancel()
         self.mqtt.stop()
         await self.http.aclose()
 

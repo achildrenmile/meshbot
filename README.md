@@ -1,98 +1,275 @@
-# MeshBot — Befehlsbot fürs CarinthiaMesh
+# MeshBot — a command bot for CarinthiaMesh
 
-Hört auf einem MeshCore-Kanal mit, erkennt Befehle mit `!`-Präfix, holt Daten von
-außen und antwortet **in einer einzigen kurzen Nachricht**.
+Listens on a MeshCore channel, recognises commands with a `!` prefix, fetches data
+from the outside world and answers **in a single short message**.
 
-Kanal: **`#at-ktn-bot`**, am Node auf **Slot 3**.
+Channel: **`#at-ktn-bot`**, slot 3 on the node.
 
-Der Bot hängt nicht am Funkgerät, sondern am MQTT-Broker des bestehenden
-[meshinfra](https://github.com/achildrenmile/meshinfra)-Stacks. Er ist damit kein
-weiterer TCP-Client am Node — davon verträgt ein Companion nur zwei.
+The bot does not attach to the radio. It attaches to the MQTT broker of the existing
+[meshinfra](https://github.com/achildrenmile/meshinfra) stack, so it is not another
+TCP client on the node — a companion only tolerates two of those.
+
+> The bot answers in **German**: it serves a Carinthian radio network, and that is
+> the language on the channel. This README is English so the design is readable to
+> anyone; the code comments and the wiki stay German.
 
 ---
 
-## Die eine Regel
+## The one rule
 
-**Sendezeit ist das knappste Gut im Netz.** Alles andere folgt daraus:
+**Airtime is the scarcest resource on the network.** Everything else follows from it:
 
-- Antworten sind auf **140 Zeichen** begrenzt, hart, vor dem Senden
-- **Nur auf Abruf**, nie von selbst
-- **Höchstens 12 Antworten je 10 Minuten** im ganzen Netz, **4 Befehle je 5 Minuten** pro Absender
-- Bei überschrittenem Limit, unbekanntem Befehl oder Duplikat: **Stille**. Eine Absage kostet genauso viel Sendezeit wie eine Antwort
-- Einlieferung erfolgt über das **bestehende Rate-Limit-Gate** von meshinfra (`tx/chan`), nicht daran vorbei — dessen eigene Bremsen gelten zusätzlich
-- Beides sind **Token-Buckets**: `limit` Antworten am Stück, danach eine je `window/limit` Sekunden. Global also 12 auf einmal, dann eine alle 50 s; je Absender 4 auf einmal, dann eine alle 75 s
+- Answers are capped at **140 characters**, hard, before sending
+- **On request only**, never unprompted
+- **At most 12 answers per 10 minutes** network-wide, **4 commands per 5 minutes** per
+  sender
+- Over the limit, unknown command, or duplicate: **silence**. A refusal costs exactly
+  as much airtime as an answer
+- Delivery goes through meshinfra's **existing rate-limit gate** (`tx/chan`), not
+  around it — that gate's own brakes apply on top
+- Both limits are **token buckets**: `limit` answers back to back, then one every
+  `window/limit` seconds. Globally 12 at once, then one every 50 s; per sender 4 at
+  once, then one every 75 s
 
-## Befehle
+**The character limit is not the whole story.** The node prefixes its own name
+(`AT-VI-KFHQ: `), and those characters count towards the firmware limit even though
+the bot never sees them. `SENDER_RESERVE` (24) keeps room for them; without it the
+node rejects the finished message with `error_code 2` and the answer vanishes without
+a trace. The bot's usable budget is `MAX_MSG_LEN - SENDER_RESERVE`.
 
-| Befehl | Alias | Antwort |
+## Commands
+
+| Command | Alias | Answer |
 |---|---|---|
-| `!wx <ort\|gipfel\|lat lon>` | `!wetter` | `WX Villach: 31.8C, 32%, Wind 12km/h W, 956hPa` |
-| `!wx <gipfel>` | | `WX Triglav 2864m: 9.0C, 79%, Wind 7km/h WNW, 1022hPa (Modell)` |
-| `!uwz` | `!warn` | `UWZ KTN: GELB Gewitter (Zentralraum bis 22:00) +1 weitere` |
+| `!wx <place\|lat lon>` | `!wetter` | `WX Villach: 31.8C, 32%, Wind 12km/h W, 956hPa` |
+| `!wx <place abroad>` | | `WX Lienz (AT): 21.9C, 77%, Wind 1km/h NNO (Modell)` |
+| `!gipfel <summit>` | `!berg` | `WX Triglav 2864m: 9.0C, 79%, Wind 7km/h WNW (Modell)` |
+| `!warn [place\|lat lon]` | `!warnung` | `WARN Waidegg (Kirchbach): GELB Gewitter (bis 22:00)` |
+| `!vorhersage <place>` | `!morgen`, `!fc` | `24h Villach: 18 bis 26C, 11mm Regen, Boeen 38km/h` |
+| `!lawine` | `!avalanche` | `Lawine KTN: Stufe 3 erheblich (ab Waldgrenze)` |
 | `!sota <ref>` | `!summit` | `OE/KT-048 Rinsennock 2334m, 10Pkt` |
 | `!sota <lat> <lon>` | | `OE/KT-072 Villacher Alpe 2166m 8Pkt (88m NW) \| …` |
-| `!relais <band> [ort\|lat lon]` | `!rpt` | `2m b. Villach: OE8XNK Gerlitzen 145.7625 -0.6 (10km) \| …` |
-| `!vorhersage <ort>` | `!morgen`, `!fc` | `24h Villach: 18 bis 26C, 11mm Regen, Boeen 38km/h` |
-| `!lawine` | `!avalanche` | `Lawine KTN: Stufe 3 erheblich (ab Waldgrenze)` |
+| `!az <lat lon>` | `!zone` | `AZ OE/KT-048 Rinsennock 2334m: JA - 30m bis zum Rand, 10Pkt` |
 | `!spot [assoc]` | `!spots` | `OE8XXX OE/KT-048 14.062 CW 12min` |
-| `!sonne [ort\|lat lon]` | `!sun` | `Sonne: auf 06:04, unter 20:15, dunkel 20:48 (noch 1h03)` |
-| `!netz` | `!status` | `Netz KTN: 29/33 aktiv, Weiterl. 2578/1h 31977/24h, stärkster WO-Pölling (395)` |
-| `!wo <name\|hash>` | `!node`, `!pfad` | Position, Verkehr und letzter Empfang eines Knotens |
-| `!pfad <hash>` | `!hash`, `!path` | `Pfad d733 = AT-K-Maria Saaler Berg: 46.666,14.344, 963/24h, zuletzt 12h` |
-| `!melde <was, wo>` | `!luecke` | Feldmeldung erfassen, Position optional |
-| `!qth <locator\|lat lon>` | `!loc` | Maidenhead in Koordinaten und zurück |
+| `!sonne [place\|lat lon]` | `!sun` | `Sonne: auf 06:04, unter 20:15, dunkel 20:48 (noch 1h03)` |
+| `!mond [place\|lat lon]` | `!moon` | `Mond: auf 10:28, unter 21:33, zunehmend 17%` |
 | `!sicht <lat,lon> <lat,lon>` | `!los` | `Sicht 18.4km: FREI, Fresnel 100% (enger bei km17.5, 1347m)` |
 | `!hoehe <lat,lon>` | `!seehoehe` | `Hoehe 46.6719,13.8902: 1478m (EU-DEM 25m)` |
 | `!dist <lat,lon> <lat,lon>` | `!entfernung` | `37.9km, Peilung 312 NW (zurueck 132 SO)` |
-| `!mond [ort\|lat lon]` | `!moon` | `Mond: auf 10:28, unter 21:33, zunehmend 17%` |
+| `!qth <locator\|lat lon>` | `!loc` | Maidenhead to coordinates and back |
+| `!netz` | `!status` | `Netz KTN: 29/33 aktiv, Pakete 2578/1h, top WO-Poelling` |
+| `!wo <name\|hash>` | `!node`, `!pfad` | Position, traffic and last contact of a node |
+| `!relais <band> [place\|lat lon]` | `!rpt` | `2m b. Villach: OE8XNK Gerlitzen 145.7625 -0.6 (10km) \| …` |
+| `!melde <what, where>` | `!luecke` | Record a field report, position optional |
 | `!dx` | `!solar` | `DX: SFI 117, A6, K0, SN 83, Xray C1.3` |
 | `!iss [lat lon]` | `!sat` | `ISS 05:44 max 24Grad, NNO>W, 6min` |
 | `!zeit` | `!time`, `!utc` | `UTC 16.08.2026 17:11:53 (Epoch 1786900313)` |
+| `!quota` | `!kontingent`, `!rest` | `Kontingent: 44/50 pro 1h00 frei. Bot 12/12 pro 10min` |
 | `!ping` | | `MeshBot OK, up 3d4h, 42 cmds` |
-| `!help [cmd]` | `!hilfe` | Übersicht, mit Befehl die Einzelheiten |
+| `!version` | `!ver`, `!stand` | `MeshBot 1.5.0: !wx kennt Orte weltweit, !gipfel neu` |
+| `!help [cmd\|group]` | `!hilfe` | Overview; with a command, the details |
 
-Ohne Ort nimmt `!wx` und `!relais` den Standardort aus der Konfiguration.
-Tippfehler werden toleriert (`!wx vilach` findet Villach).
+Without a place, `!wx` and `!relais` use the default location from the configuration.
+Typos are tolerated (`!wx vilach` finds Villach) — and **flagged**, see below.
 
-**Ortsnamen: rund 3200 Kärntner Orte**, aus OpenStreetMap erzeugt und in
-`data/stations_ktn.json` abgelegt — bis hinunter zu Weilern und Ortsteilen.
-`Sankt` und `St.` sind derselbe Ort, zweisprachige Namen gelten in beiden
-Sprachen (`Feistritz ob Bleiburg` wie `Bistrica pri Pliberku`). Das Verzeichnis
-endet an der Landesgrenze: `!wx Innsbruck` bleibt unbekannt, denn ein Treffer
-wäre schlimmer als keiner — er lieferte Kärntner Werte für Tirol.
+**A missing argument produces the usage line, not silence.** Someone who typed a
+command correctly and merely forgot an argument has not produced garbage. The airtime
+is better spent on `!sicht <lat,lon> <lat,lon> - z.B. !sicht 46.60,13.67 46.79,14.96`
+than on a second round of guessing. An *unknown* command still gets silence.
 
-Gemessen wird an **34 Wetterstationen**, und **Ortsnamen bekommen Talstationen**
-(bis 1100 m). Arnoldstein liegt auf 580 m, die Villacher Alpe auf 2117 m und ist
-trotzdem die nächste Station — ohne diese Regel antwortet `!wx arnoldstein` mit
-zehn Grad zu wenig. Wo die eigene Station am Berg steht (Mallnitz, Flattnitz,
-Kanzelhöhe), gilt sie. Bei einer **Position** gilt die Grenze nicht: wer vom
-Dobratsch fragt, will die Werte vom Dobratsch.
+## What gets found, and in which order
 
-Steht die Station woanders als der gefragte Ort, wird sie mitgenannt:
+Five stages. The rule behind them is the same one twice: **measured beats computed,
+certain beats guessed.**
+
+| | Directory | Match | Answer |
+|---|---|---|---|
+| 1. | Carinthian places | exact | measurement from one of 34 stations |
+| 2. | Summits | exact or whole word | model |
+| 3. | Places worldwide | exact | model, with country code |
+| 4. | Carinthian places | similar | measurement, marked `?` |
+| 5. | Places worldwide | similar | model, marked `?` |
+
+**Why stage 3 comes before stage 4:** until 2026-08-28, `!wx hamburg` answered
+`WX Haimburg (Voelkermarkt-Goldbrunnhof)` — a Carinthian hamlet with a similar name.
+An exact match must beat a guessed one, across the border too.
+
+**Why stage 4 comes before stage 5:** the same in reverse. In the worldwide directory
+the typo `vilach` finds **Vilachá in Spain, population five**. A guess must not beat
+another guess.
+
+> **No similarity threshold can separate these, and that was measured.**
+> `hamburg → haimburg` scores **0.933**; the genuine typo `vilach → villach` scores
+> **0.923**. The wrong match is *more* similar than the right one. Any threshold that
+> locks Hamburg out also locks out `vilach`, `goldek` and `spittall`. That Hamburg is
+> a real place outside Carinthia is not in the string — that is knowledge, and
+> knowledge belongs in a table, not in a threshold.
+
+**A guess says so.** One question mark on the name, one single character:
+
+```
+!wx vilach   →   WX Villach?: 20.7C, 86%, Wind 5km/h NO, 960hPa
+```
+
+It reads as *I assume you mean Villach*. Before this, a guessed answer was
+indistinguishable from a known one.
+
+## Places
+
+**Around 3200 Carinthian places**, generated from OpenStreetMap into
+`data/stations_ktn.json`, down to hamlets and quarters. `Sankt` and `St.` are the same
+place; bilingual names work in both languages (`Feistritz ob Bleiburg` as well as
+`Bistrica pri Pliberku`).
+
+Measurements come from **34 weather stations**, and **place names get valley
+stations** (up to 1100 m). Arnoldstein sits at 580 m, the Villacher Alpe at 2117 m and
+is still the nearest station — without that rule `!wx arnoldstein` answers ten degrees
+too cold. Where a station stands in the place itself, it counts even up high
+(Mallnitz, Flattnitz, Kanzelhöhe). Given a **position** the rule does not apply:
+whoever asks from the Dobratsch wants the Dobratsch values.
+
+If the station sits somewhere other than the place asked for, it is named:
 
 ```
 !wx Knappenberg   →   WX Knappenberg (Friesach): 25.3C, 51%, Wind 11km/h NO, 954hPa
 ```
 
-**Statt eines Ortsnamens geht überall auch eine Position** — `!wx 46.6031 13.6712`,
-`!relais 2m geo:46.79,13.50`, `!vorhersage 46,6247, 14,3053`. Bei `!wx` wird die
-nächstgelegene Wetterstation genommen und **ihr Name mit ausgegeben**, damit klar
-ist, woher die Werte stammen.
+**Lookup is umlaut-free, the answer is not.** `!wx noetsch` and `!wx nötsch` reach the
+same entry, and the answer spells the place the way it is spelled:
 
-**Dreistufige Hilfe:** `!help` listet alle Befehle, `!help standort` eine Gruppe
-davon, `!help sicht` einen einzelnen. Die flache Liste ist die bessere Antwort —
-wer `!help` tippt, will sehen was es gibt, nicht ein Menü durchklicken. Sie wächst
-aber mit jedem Befehl; passt sie nicht mehr in eine Nachricht, fällt die Antwort
-selbsttätig auf die Gruppennamen zurück, statt am Zeichenlimit abgeschnitten zu
-werden.
+```
+!wx nötsch   →   WX Nötsch (Bad Bleiberg): 20.4C, 81%, Wind 7km/h O, 914hPa
+```
 
-**Gipfel per Position:** Am Berg kennt man die Referenz selten, das Gerät aber die
-Koordinaten. `!sota 46.60 13.67` liefert die nächstgelegenen Gipfel mit Entfernung
-und Himmelsrichtung — über 25 km Entfernung kommt nichts, das wäre als
-Standortangabe wertlos.
+Until 2026-08-28 the lookup key doubled as the display name, so the place was
+misspelled in every answer. 405 names have their umlaut back. Station names cannot be
+fixed this way: GeoSphere itself writes `DOELLACH` and `GMUEND/KAERNTEN` — that is the
+name there, not our transliteration.
 
-Die Position darf in beliebiger Schreibweise dahinterstehen, damit man sie aus der
-App einfach hineinkopieren kann statt sie abzutippen:
+**A position works anywhere a place name does** — `!wx 46.6031 13.6712`,
+`!relais 2m geo:46.79,13.50`, `!vorhersage 46,6247, 14,3053`. For `!wx` the nearest
+weather station is used and **its name is included**, so it is clear where the values
+came from.
+
+## Places outside Carinthia
+
+The 34 stations end at the state border. Since 2026-08-28 the answer does not:
+everything beyond gets a **model value**, with a country code.
+
+```
+!wx lienz     →   WX Lienz (AT): 21.9C, 77%, Wind 1km/h NNO (Modell)
+!wx hamburg   →   WX Hamburg (DE): 18.0C, 85%, Wind 13km/h SSO (Modell)
+```
+
+The country code is not decoration: **there is a Lienz in East Tyrol and one in the
+canton of St. Gallen**, a Hamburg in Germany and four in the USA. Without the code the
+receiver cannot tell which one arrived.
+
+Among identically named candidates, **proximity beats population** — "Peca" is a
+village in Indonesia and a mountain in the Karawanks, both with population zero. If
+nothing is nearby, the larger place wins.
+
+Position lookup and model values both come from Open-Meteo, the same source as the
+summit weather, so an outage takes out one dependency and not two.
+
+## Summit weather
+
+Summits have their own command, `!gipfel` (alias `!berg`), covering **9442 summits**
+in ten countries from the SOTA list: AT, IT, SI, DE, CH, HR, CZ, SK, HU, PL.
+
+```
+!gipfel triglav     →   WX Triglav 2864m: 9.0C, 79%, Wind 7km/h WNW (Modell)
+!gipfel marmolada   →   WX Marmolada 3343m: 7.4C, 74%, Wind 9km/h SW (Modell)
+```
+
+`!wx goldeck` still works — `!wx` still answers an unambiguous summit name. What it no
+longer does is *guess* among summits: that turned `lienz` into "Sandegg - Lienzer" and
+`eckwand` into "Bl-eckwand".
+
+> **Nobody measures on a summit — that is a model value, and the answer says so.**
+> Hence the `(Modell)` suffix. The numbers come from Open-Meteo, computed **at summit
+> elevation**: without that parameter a weather model answers for the mean elevation
+> of its grid cell, which on a mountain is easily several hundred metres too low, with
+> correspondingly too-warm temperatures.
+
+**Where something is measured, nothing is computed** — that holds on mountains too:
+
+```
+!wx dobratsch   →   WX Dobratsch (Villacher Alpe): 11.7C, 99%, Wind 30km/h SW, 791hPa
+```
+
+No `(Modell)`, because the *Villacher Alpe* station stands 200 m from the summit
+cross. A summit takes the measurement as soon as a station is **closer than 3 km and
+within 300 m of elevation**. Both conditions together: proximity alone is not enough,
+a valley station can be near in a straight line and still measure different weather
+1500 m lower down.
+
+> **How far apart the two can be, on the same mountain in the same minute:** the model
+> said 8 km/h of wind, the summit station measured **30 km/h**. Planning a ridge walk
+> on the model value produces a surprise. That is exactly why `(Modell)` is there.
+
+**Names are generous:** `Dobratsch` also finds `Villacher Alpe (Dobratsch)`,
+`Marmolada` also finds `Punta Penia – Marmolada`, `grossglockner` also finds
+`Großglockner`. Where two summits share a name, the higher one wins.
+
+**A match must be a whole word, not a fragment.** Measured against two dozen real
+summit queries, the stricter rule costs exactly one hit — `glockner` — and an alias
+table catches that:
+
+| typed | found |
+|---|---|
+| `koralpe` | Großer Speikkogel, 2140 m |
+| `saualpe` | Ladinger Spitz, 2079 m |
+| `kellerwand` | Hohe Warte, 2780 m |
+| `hochstuhl` | Stol, 2236 m *(Slovenian name, same mountain)* |
+| `glockner` | Großglockner, 3798 m |
+| `obir` | Hochobir, 2139 m |
+
+The SOTA list names the highest point; local usage names the massif. A test asserts
+every alias points at an entry that exists — an alias into the void would silently
+fall back to guessing, which is worse than no alias.
+
+**Some mountains are missing from the SOTA list entirely.** It only carries summits
+with at least 150 m of prominence, which leaves Carinthia with 282 entries; Petzen,
+Kornock, Falkert and the Koschuta are not among them. For those, the place lookup
+steps in:
+
+```
+!gipfel petzen   →   WX Peca (AT): 16.9C, 66%, Wind 11km/h W (Modell)
+```
+
+`Peca` is the Slovenian name of the Petzen. If the place lookup finds nothing either —
+`Kornock`, for instance — the bot says so instead of returning a similar-sounding
+foreign mountain.
+
+## Help on the air
+
+Three stages: all commands, one group, one command.
+
+```
+!help            24 Befehle in 5 Gruppen: wetter berg standort netz sonst | !help <thema>
+!help berg       Berg: !gipfel !sota !az !spot !sonne !mond
+!help az         !az <lat lon> stehst du in der SOTA-Aktivierungszone? Polygon von SOTLAS
+!help pfad       aliases resolve too — this is the help for !wo
+```
+
+The flat list used to be the normal case. It no longer fits: at 24 commands the
+overview falls back to group names by itself rather than being truncated at the
+character limit. A test checks, at every character limit, that **either** all commands
+**or** all groups are named — never a stump. Two more tests check that every command
+has its own help text and appears in a group, otherwise a new command drops silently
+out of the documentation.
+
+`netz` is both a command and a group; asking for it returns both in one message.
+
+## Summits by position
+
+On a summit you rarely know the reference, but the device knows the coordinates.
+`!sota 46.60 13.67` returns the nearest summits with distance and bearing — nothing
+beyond 25 km, which would be worthless as a location statement.
+
+The position may be written in any style, so it can be pasted from the app rather than
+typed out:
 
 ```
 !sota 46.6031, 13.6712
@@ -101,116 +278,137 @@ App einfach hineinkopieren kann statt sie abzutippen:
 !sota https://maps.google.com/?q=46.6031,13.6712
 ```
 
-Gesucht werden die ersten zwei Dezimalzahlen im Text — ganze Zahlen wie ein
-Zoomfaktor in einem Kartenlink stören nicht.
+The first two decimal numbers in the text are used — whole numbers such as a zoom
+factor in a map link do not interfere.
 
-## Funkstrecken prüfen
+## Checking radio paths
 
-`!sicht` ist der einzige Befehl, der eine echte Frage des Netzbetriebs beantwortet:
-**Sehen sich diese zwei Punkte?** Er tastet das Gelände zwischen ihnen an 85 Stellen
-ab, legt die Sichtlinie darüber und meldet die engste Stelle.
+`!sicht` is the one command that answers a real operational question: **can these two
+points see each other?** It samples the terrain between them at 85 points, lays the
+line of sight over it and reports the tightest spot.
 
 ```
 !sicht 46.603101,13.671223 46.67191,13.89025
 Sicht 18.4km: FREI, Fresnel 100% (enger bei km17.5, 1347m)
 ```
 
-Maßstab ist **nicht** die blanke Sichtlinie, sondern wie viel der ersten Fresnelzone
-frei bleibt — jenes Ellipsoids um den Strahl, das der Großteil der Energie
-durchläuft. Ein Strahl, der den Grat streift, ist geometrisch frei und funktechnisch
-tot. Ab 60 % freier Zone heißt es `FREI`, darunter `KNAPP`, bei Berührung
-`BLOCKIERT` samt fehlender Höhe.
+The measure is **not** bare line of sight but how much of the first Fresnel zone stays
+clear — the ellipsoid around the beam through which most of the energy travels. A beam
+that grazes the ridge is geometrically clear and radio-technically dead. From 60 %
+clear it reads `FREI`, below that `KNAPP`, and on contact `BLOCKIERT` together with the
+missing height.
 
-Mitgerechnet wird die Erdkrümmung mit dem Standardfaktor k = 4/3: Der Funkstrahl
-biegt sich in der Atmosphäre leicht mit, er läuft also nicht ganz geradeaus.
+Earth curvature is included with the standard factor k = 4/3: the beam bends slightly
+with the atmosphere, so it does not travel perfectly straight.
 
-**Der Nahbereich bleibt außen vor** — die ersten und letzten 500 m einer Strecke
-gehen nicht in die Bewertung ein. Dort ist der Fresnelradius rechnerisch fast null,
-jeder Bodenbuckel ergäbe absurde Prozentwerte, und in dieser Nähe entscheidet die
-Aufstellung über die Verbindung, nicht das Streckenprofil. Wer 50 m vor der Antenne
-ein Hindernis hat, sieht das ohne Rechner.
+**The near field is excluded** — the first and last 500 m of a path do not enter the
+assessment. There the Fresnel radius is nearly zero by arithmetic, every bump in the
+ground would produce absurd percentages, and at that range the mounting decides the
+link, not the terrain profile. An obstacle 50 m in front of the antenna is visible
+without a computer.
 
-**Grenzen, die man kennen sollte:** Gerechnet wird auf dem nackten Gelände. Wald,
-Häuser und Masten stehen nicht im Modell — `FREI` heißt „das Gelände steht nicht im
-Weg", nicht „die Verbindung steht". Angenommen werden 3 m Antennenhöhe an beiden
-Enden. Und das Höhenmodell hat 25 m Rasterweite: ein einzelner scharfer Grat kann
-zwischen zwei Rasterpunkten verschwinden.
+**Limits worth knowing:** the computation runs on bare terrain. Forest, buildings and
+masts are not in the model — `FREI` means "the terrain is not in the way", not "the
+link works". Antenna height is assumed to be 3 m at both ends. And the elevation model
+has a 25 m grid: a single sharp ridge can disappear between two grid points.
 
-## Datenquellen
+## Data sources
 
-| Befehl | Quelle | Lizenz / Hinweis |
+| Command | Source | Licence / note |
 |---|---|---|
-| `!wx` | GeoSphere Austria, Datensatz `tawes-v1-10min` | CC BY 4.0, kein Schlüssel nötig |
-| `!wx <gipfel>` | Open-Meteo, auf die Gipfelhoehe gerechnet | 9442 Gipfel aus AT, IT, SI, DE, CH, HR, CZ, SK, HU, PL |
-| `!wx` Ortsnamen | OpenStreetMap, erzeugt mit `tools/build_orte.py` | ODbL, als JSON im Repo, ohne Netz |
-| `!uwz` | GeoSphere Warn-API, `getWarningsForCoords` | vier Abfragepunkte decken Kärnten ab |
-| `!sota` per Referenz | SOTA API v2 | |
-| `!sota` per Position | 1780 Gipfel aus OE/KT, ST, TI, SB, OO im Repo | lokal, ohne Netz, dient auch als Rückfall |
-| `!relais` | RelaisBlick (oeradio.at), als JSON im Repo | funktioniert ohne Internet |
-| `!vorhersage` | GeoSphere, Modell `nwp-v1-1h-2500m` | punktgenau über Koordinaten |
-| `!lawine` | EAWS-Bulletin, Region `AT-02` | nur in der Saison |
-| `!spot` | SOTAwatch über die SOTA-API | Vorgabe: nur OE |
-| `!netz` | Karten-API von map.carinthiamesh.com | zählt über zwei Fenster: Stunde und Tag |
-| `!sonne`, `!mond`, `!zeit` | gerechnet, keine Quelle | funktioniert ohne Internet |
-| `!dist`, `!qth` | gerechnet, keine Quelle | funktioniert ohne Internet |
-| `!sicht`, `!hoehe` | OpenTopoData, Modell EU-DEM 25 m | eine Abfrage je Strecke, Ergebnis eine Woche im Cache |
-| `!dx` | hamqsl.com (N0NBH) | Solar- und Ausbreitungsdaten |
-| `!iss` | Bahndaten von Celestrak, Rechnung mit SGP4 | TLE 6 h im Cache, danach mit `~` markiert |
-| `!wo`, `!pfad` | Karten-API von map.carinthiamesh.com | Hash ist der Anfang des Public Key |
+| `!wx` | GeoSphere Austria, dataset `tawes-v1-10min` | CC BY 4.0, no key needed |
+| `!wx` place names | OpenStreetMap, built by `tools/build_orte.py` | ODbL, JSON in the repo, works offline |
+| `!wx` abroad | Open-Meteo geocoding + forecast | model value, country code in the answer |
+| `!gipfel` | Open-Meteo, computed at summit elevation | 9442 summits from AT, IT, SI, DE, CH, HR, CZ, SK, HU, PL |
+| `!warn` | GeoSphere warning API, `getWarningsForCoords` | four query points cover Carinthia |
+| `!vorhersage` | GeoSphere, model `nwp-v1-1h-2500m` | point-accurate via coordinates |
+| `!lawine` | EAWS bulletin, region `AT-02` | in season only |
+| `!sota` by reference | SOTA API v2 | |
+| `!sota` by position | the local summit file | offline, also serves as fallback |
+| `!az` | activation-zone polygons from SOTLAS | cached 30 days |
+| `!spot` | SOTAwatch via the SOTA API | default: OE only |
+| `!relais` | RelaisBlick (oeradio.at), JSON in the repo | 219 repeaters, works offline |
+| `!netz`, `!wo` | map API of map.carinthiamesh.com | hash is the start of the public key |
+| `!sicht`, `!hoehe` | OpenTopoData, model EU-DEM 25 m | one query per path, cached for a week |
+| `!dx` | hamqsl.com (N0NBH) | solar and propagation data |
+| `!iss` | orbital data from Celestrak, SGP4 | TLE cached 6 h, then marked `~` |
+| `!sonne`, `!mond`, `!zeit`, `!dist`, `!qth` | computed, no source | works offline |
 
-Zwischenspeicher: Wetter 10 min, Warnungen 5 min, SOTA und Relais 24 h. Fällt eine
-Quelle aus, kommt der letzte bekannte Wert mit `~` davor — lieber ein alter Wert
-mit Kennzeichnung als gar keiner.
+Caches: weather 10 min, warnings 5 min, SOTA and repeaters 24 h, terrain and place
+lookups a week. If a source fails, the last known value is returned prefixed with `~`
+— an old value that says it is old beats no value at all.
 
 ## Installation
 
 ```bash
 git clone <repo> meshbot && cd meshbot
 cp .env.example .env && chmod 600 .env
-$EDITOR .env                 # Broker, Topics, Kanal
+$EDITOR .env                 # broker, topics, channel
 docker compose up -d --build
 docker compose logs -f
 ```
 
-Prüfen, ob er läuft:
+Check that it is running:
 
 ```bash
 docker compose exec meshbot python -c "import urllib.request;print(urllib.request.urlopen('http://127.0.0.1:8080/healthz').read())"
 ```
 
-## Not-Aus
+## Emergency stop
 
-Zwei Wege, beide sofort wirksam:
+Two ways, both effective immediately:
 
 ```bash
-mosquitto_pub -h <broker> -t meshinfra/bot/admin -m pause     # stoppt jedes Senden
+mosquitto_pub -h <broker> -t meshinfra/bot/admin -m pause     # stops all sending
 mosquitto_pub -h <broker> -t meshinfra/bot/admin -m resume
 ```
 
-oder `BOT_ENABLED=false` in der `.env` und `docker compose up -d`.
+or `BOT_ENABLED=false` in `.env` followed by `docker compose up -d`.
 
-## Konfiguration
+## Configuration
 
-Alle Werte über Umgebungsvariablen, siehe `.env.example`. Die wichtigsten:
+All values come from environment variables, see `.env.example`. The important ones:
 
-| Variable | Bedeutung |
+| Variable | Meaning |
 |---|---|
-| `TOPIC_RX` | Topic mit den entschlüsselten Kanalnachrichten, z. B. `meshinfra/message/channel/3` |
-| `TOPIC_TX` | Einlieferung Richtung Mesh, `meshinfra/tx/chan` |
-| `TX_CHANNEL` | Kanalslot am Node, auf dem geantwortet wird |
-| `CHANNEL_FILTER` | Nur diesen Kanal bedienen, leer = alle |
-| `MAX_MSG_LEN` | Zeichengrenze, Vorgabe 140 |
-| `GLOBAL_LIMIT` / `SENDER_LIMIT` | Airtime-Bremsen |
-| `BOT_NAME` | Eigener Name, dient dem Schleifenschutz |
+| `TOPIC_RX` | topic carrying the decrypted channel messages, e.g. `meshinfra/message/channel/3` |
+| `TOPIC_TX` | delivery towards the mesh, `meshinfra/tx/chan` |
+| `TX_CHANNEL` | channel slot on the node used for answers |
+| `CHANNEL_FILTER` | serve only this channel, empty = all |
+| `MAX_MSG_LEN` | character limit, default 140 |
+| `SENDER_RESERVE` | room for the node's own name prefix, default 24 |
+| `TRANSLITERATE` | rewrite umlauts as `ae/oe/ue`; **off** since 2026-08-28 |
+| `GLOBAL_LIMIT` / `SENDER_LIMIT` | airtime brakes |
+| `BOT_NAME` | own name, used for loop protection |
 
-## Daten aktualisieren
+## Deployment
 
-**Relaisliste** aus RelaisBlick neu erzeugen:
+```bash
+./deploy.sh              # rsync to the bot host, rebuild, wait for healthy
+./deploy.sh --dry-run    # show what would change
+```
+
+The bot host holds a copy without git — no remote, no pull. The script refuses to
+deploy when the tests are red, and waits for the container to report `healthy`; a
+started container is not a running bot.
+
+**`data/` is deployed along with the code.** It was excluded for a long time, on the
+grounds that it held the running bot's state — it does not: runtime state lives in the
+`meldungen:/data` volume, while the repo directory lands at `/srv/data`. On
+2026-08-28 that cost a debugging session: the place directory had been rebuilt,
+deployed, tests green — and the bot kept answering with the old names, because the file
+never made it across.
+
+`.env` is deliberately **not** deployed. The host keeps its own limits.
+
+## Updating the data
+
+**Repeater list** from RelaisBlick:
 
 ```bash
 python3 - <<'PY'
 import json
-rb=json.load(open("/pfad/zu/relaisblick/data/relais.json"))
+rb=json.load(open("/path/to/relaisblick/data/relais.json"))
 rel=[{"call":r["rufzeichen"],"ort":r["standort"],"bl":r.get("bundesland"),"typ":r.get("typ"),
       "band":r.get("band"),"tx":r.get("txFrequenz"),"shift":r.get("shift"),
       "lat":r["koordinaten"]["lat"],"lon":r["koordinaten"]["lng"]}
@@ -220,23 +418,33 @@ json.dump({"quelle":"RelaisBlick","stand":rb.get("lastUpdate"),"relais":rel},
 PY
 ```
 
-**Wetterstationen**: `data/stations_ktn.json` bildet Ort auf die nächstgelegene
-TAWES-Station ab. Bewusst werden **Talstationen bevorzugt** (bis 1100 m) — sonst
-liefert eine Abfrage für Nötsch die Werte der Villacher Alpe auf 2140 m.
-
-**Ortsverzeichnis** neu aus OpenStreetMap erzeugen:
+**Place directory** from OpenStreetMap:
 
 ```bash
 python3 tools/build_orte.py
 ```
 
-Zieht rund 3200 Kärntner Ortsknoten über Overpass, verwirft alles außerhalb der
-Landesgrenze und hängt jeden Ort an eine Talstation. Die Stationsliste bleibt
-stehen, die Handpflege kommt aus `data/orte_gepflegt.json` und überschreibt das
-Ergebnis — das erzeugte Verzeichnis selbst wird jedes Mal komplett ersetzt,
-sonst überlebte ein einmal falsch erzeugter Eintrag jeden weiteren Lauf.
-Overpass antwortet unter Last mit `504`; das Skript wartet und wiederholt, ein
-Lauf dauert deshalb bis zu drei Minuten.
+Pulls around 3200 Carinthian place nodes via Overpass, discards everything outside the
+state border and attaches each place to a valley station. The station list survives;
+hand-maintained entries come from `data/orte_gepflegt.json` and override the result.
+The generated directory itself is replaced wholesale every time — otherwise one
+badly generated entry would survive every later run. Overpass answers `504` under
+load; the script waits and retries, so a run can take up to three minutes.
+
+**Summit directory** from the SOTA list:
+
+```bash
+python3 tools/build_gipfel.py                  # all ten associations
+python3 tools/build_gipfel.py --assoc OE I S5  # a subset
+```
+
+One fetch of `summitslist.csv` rather than one API call per region. The script refuses
+to write a file with fewer than 1000 summits — that pattern means a broken fetch, and
+a truncated directory is worse than a stale one.
+
+**Weather stations**: `data/stations_ktn.json` maps places to the nearest TAWES
+station. Valley stations are preferred deliberately (up to 1100 m), otherwise a query
+for Nötsch returns the values of the Villacher Alpe at 2140 m.
 
 ## Tests
 
@@ -245,12 +453,24 @@ python -m venv .venv && .venv/bin/pip install -r requirements.txt pytest
 .venv/bin/python -m pytest tests -q
 ```
 
-83 Tests. Der wichtigste prüft als Eigenschaft über alle Handler: **keine Antwort
-überschreitet je die Zeichengrenze.**
+400 tests. The most important one is a property across every handler: **no answer ever
+exceeds the character limit.**
 
-## Was der Bot nicht tut
+## Versioning
 
-- **Nicht von selbst senden.** Push-Quellen wie RSS gehören in einen eigenen Dienst
-- **Keine Mehrfachnachrichten.** Passt es nicht in eine Zeile, wird gekürzt
-- **Nicht auf sich selbst reagieren.** Nachrichten mit dem eigenen Absendernamen werden verworfen
-- **Keine Fehlermeldungen ins Funknetz.** Was nicht beantwortet werden kann, bleibt unbeantwortet
+`!version` reports which build is on the air and what changed with it. The number and
+the one-line summary live in `meshbot/version.py`.
+
+Nobody on the radio can see the repository. When somebody reports "the bot is
+answering oddly", they need to be able to say *which* bot — otherwise every
+investigation starts with guessing whether the deployment even arrived.
+
+Counting: major for a change that makes existing commands answer differently, minor
+for a new command, patch for a fix.
+
+## What the bot does not do
+
+- **Never sends unprompted.** Push sources such as RSS belong in a separate service
+- **Never sends multiple messages.** If it does not fit on one line, it gets shortened
+- **Never reacts to itself.** Messages carrying its own sender name are discarded
+- **Never sends error messages over the air.** What cannot be answered stays unanswered

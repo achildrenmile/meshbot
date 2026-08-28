@@ -1,12 +1,12 @@
-"""!iss — nächster sichtbarer Überflug der Raumstation.
+"""!iss — the next visible pass of the space station.
 
-Bahndaten (TLE) von Celestrak, Bahnrechnung mit SGP4 — demselben Modell, mit
-dem die Bahndaten erzeugt werden. Alles andere (Kepler-Näherungen) liegt nach
-wenigen Stunden um Minuten daneben.
+Orbital data (TLE) from Celestrak, orbit computation with SGP4 — the same model
+the orbital data is generated with. Anything else (Kepler approximations) is off
+by minutes after a few hours.
 
-TLE altern: Nach etwa einer Woche wird die Vorhersage merklich ungenau. Der
-Cache läuft deshalb nach 6 Stunden ab, und die Antwort verschweigt nicht, wenn
-nur ein alter Datensatz da war.
+TLEs age: after roughly a week the prediction becomes noticeably inaccurate. The
+cache therefore expires after 6 hours, and the answer does not hide it when only
+an old dataset was available.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from sgp4.api import Satrec
 RAD = math.pi / 180
 A_ERDE = 6378.137            # WGS84, km
 F_ERDE = 1 / 298.257223563
-MIN_ELEVATION = 10.0         # darunter steht sie im Gelände, nicht am Himmel
+MIN_ELEVATION = 10.0         # below that it is in the terrain, not in the sky
 
 
 async def fetch_tle(client: httpx.AsyncClient, url: str) -> tuple[str, str]:
@@ -50,7 +50,7 @@ def _beobachter_ecef(lat: float, lon: float, hoehe_km: float = 0.0) -> tuple[flo
 
 def _blickwinkel(r_teme: tuple[float, float, float], jd: float,
                  lat: float, lon: float) -> tuple[float, float]:
-    """(Elevation, Azimut) in Grad, vom Beobachter aus gesehen."""
+    """(elevation, azimuth) in degrees, as seen from the observer."""
     g = _gmst(jd)
     x = r_teme[0] * math.cos(g) + r_teme[1] * math.sin(g)
     y = -r_teme[0] * math.sin(g) + r_teme[1] * math.cos(g)
@@ -72,7 +72,7 @@ def _blickwinkel(r_teme: tuple[float, float, float], jd: float,
 
 def naechster_ueberflug(tle: tuple[str, str], lat: float, lon: float, start: datetime,
                         stunden: int = 24, schritt_s: int = 30) -> dict | None:
-    """Ersten Überflug über `MIN_ELEVATION` im Suchfenster finden."""
+    """Find the first pass above `MIN_ELEVATION` within the search window."""
     sat = Satrec.twoline2rv(tle[0], tle[1])
     beginn = hoehepunkt = None
     max_el = -90.0

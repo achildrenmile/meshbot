@@ -1,4 +1,4 @@
-"""Mondrechnung, geprueft gegen die Werte des US Naval Observatory."""
+"""Lunar computation, checked against US Naval Observatory values."""
 
 from datetime import date, datetime, timedelta, timezone
 
@@ -10,7 +10,7 @@ VILLACH = (46.6167, 13.85)
 
 
 def test_auf_und_untergang_gegen_usno():
-    """USNO fuer 16.08.2026, 46.6167N 13.85O: Aufgang 08:28, Untergang 19:34 UTC."""
+    """USNO for 2026-08-16, 46.6167N 13.85E: rise 08:28, set 19:34 UTC."""
     w = mond.ereignisse(date(2026, 8, 16), *VILLACH)
     assert w["aufgang"].strftime("%H:%M") == "08:28"
     assert abs((w["untergang"] - datetime(2026, 8, 16, 19, 34, tzinfo=timezone.utc))
@@ -28,7 +28,7 @@ def test_phase_gegen_usno(tag, anteil, zunehmend):
 
 
 def test_fehlender_aufgang_ist_kein_fehler():
-    """Der Mond geht taeglich ~50min spaeter auf — mal faellt ein Ereignis aus."""
+    """The moon rises ~50 min later each day — sometimes an event drops out."""
     ohne = [t for t in (date(2026, 9, 1) + timedelta(days=i) for i in range(31))
             if mond.ereignisse(t, *VILLACH)["aufgang"] is None]
     assert ohne, "in einem Monat muss mindestens ein Tag ohne Aufgang liegen"

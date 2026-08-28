@@ -1,16 +1,16 @@
-"""Berge und Orte sind zwei Verzeichnisse, nicht eines.
+"""Mountains and places are two directories, not one.
 
-Aus dem Kanal gemeldet, drei Faelle derselben Krankheit: `!wx lienz` lieferte
-"Sandegg - Lienzer", `!wx eckwand` lieferte "Bleckwand", `!wx hamburg` lieferte
-"Haimburg". Jedes Mal hat eine Lockerung, die einen Berg finden sollte, einen
-Ortsnamen verbogen -- oder umgekehrt.
+Reported from the channel, three cases of the same disease: `!wx lienz` returned
+"Sandegg - Lienzer", `!wx eckwand` returned "Bleckwand", `!wx hamburg` returned
+"Haimburg". Every time, a loosening meant to find a mountain bent a place name
+out of shape -- or the other way round.
 
-Die Tests hier halten drei Zusagen fest:
+The tests here pin down three promises:
 
-1. **Ganzes Wort statt Teilstring.** Was mitten im Wort steckt, ist kein Treffer.
-2. **Geraten wird als geraten gekennzeichnet.** Ein Fragezeichen, ein Zeichen.
-3. **Bekannte Luecken heissen Luecken.** Petzen fehlt der SOTA-Liste; sie durch
-   "Pletzen" zu ersetzen ist keine Antwort, sondern eine Verwechslung.
+1. **Whole word instead of substring.** What sits mid-word is not a match.
+2. **A guess is marked as a guess.** One question mark, one character.
+3. **Known gaps are called gaps.** Petzen is missing from the SOTA list;
+   replacing it with "Pletzen" is not an answer but a mix-up.
 """
 
 from __future__ import annotations
@@ -33,11 +33,11 @@ IDX = h_berg.index(GIPFEL)
 
 
 def _bot(ohne_ortsuche: bool = True):
-    """Bot ohne Netz.
+    """A bot without network.
 
-    `ohne_ortsuche` legt die Ortssuche still, indem sie so tut, als haette sie
-    nichts gefunden -- genau das Verhalten bei ausgefallener Quelle. Die Tests
-    hier pruefen die **Reihenfolge** der Stufen, nicht die Fremdquelle.
+    `ohne_ortsuche` silences the place lookup by pretending it found nothing --
+    exactly the behaviour when the source is down. The tests here check the
+    **order** of the stages, not the external source.
     """
     from meshbot.main import Bot
     b = Bot.__new__(Bot)
@@ -59,38 +59,38 @@ def run(coro):
     return asyncio.run(coro)
 
 
-# --- 1. Ganzes Wort statt Teilstring ------------------------------------
+# --- 1. Whole word instead of substring ---------------------------------
 
 @pytest.mark.parametrize("frage,nicht", [
-    ("eckwand", "Bleckwand"),          # steckt mitten im Wort
-    ("lienz", "Sandegg - Lienzer"),    # steckt am Wortanfang, ist aber nicht das Wort
+    ("eckwand", "Bleckwand"),          # sits mid-word
+    ("lienz", "Sandegg - Lienzer"),    # sits at a word start but is not the word
 ])
 def test_teiltreffer_mitten_im_wort_zaehlt_nicht(frage, nicht):
     g, stufe = h_berg.suche_stufe(IDX, frage, fuzzy=False)
     assert g is None, f"{frage} traf {g and g['name']}, erwartet kein sicherer Treffer"
     assert stufe != "exakt"
-    # Und auch mit Raten darf es nicht *unmarkiert* durchgehen.
+    # And even with guessing it must not pass through *unmarked*.
     g2, stufe2 = h_berg.suche_stufe(IDX, frage)
     if g2 is not None and g2["name"] == nicht:
         assert stufe2 == "geraten", "Fehltreffer muss wenigstens als geraten gelten"
 
 
 @pytest.mark.parametrize("frage,erwartet", [
-    ("hafner", "Großer Hafner"),        # ganzes Wort in einem Doppelnamen
+    ("hafner", "Großer Hafner"),        # a whole word inside a double name
     ("sonnblick", "Hoher Sonnblick"),
     ("speikkogel", "Großer Speikkogel"),
 ])
 def test_ganzes_wort_findet_den_doppelnamen(frage, erwartet):
-    """Die Verschaerfung darf die echten Teiltreffer nicht mitnehmen."""
+    """The stricter rule must not take the genuine partial hits with it."""
     g, stufe = h_berg.suche_stufe(IDX, frage, fuzzy=False)
     assert g is not None and g["name"] == erwartet
     assert stufe == "wort"
 
 
 @pytest.mark.parametrize("frage,erwartet", [
-    ("koralpe", "Großer Speikkogel"),   # SOTA benennt den hoechsten Punkt
+    ("koralpe", "Großer Speikkogel"),   # SOTA names the highest point
     ("saualpe", "Ladinger Spitz"),
-    ("glockner", "Großglockner"),       # Einwortname, Wortgrenze hilft nicht
+    ("glockner", "Großglockner"),       # single-word name, word boundary is no help
     ("obir", "Hochobir"),
 ])
 def test_gelaeufiger_name_findet_den_sota_namen(frage, erwartet):
@@ -100,12 +100,12 @@ def test_gelaeufiger_name_findet_den_sota_namen(frage, erwartet):
 
 
 def test_jeder_alias_zeigt_auf_einen_vorhandenen_gipfel():
-    """Ein Alias ins Leere faellt still aufs Raten zurueck -- schlimmer als keiner."""
+    """An alias into the void silently falls back to guessing -- worse than none."""
     for gelaeufig, sota in h_berg.ALIASE.items():
         assert sota in IDX, f"{gelaeufig} -> {sota} steht nicht im Verzeichnis"
 
 
-# --- 2. Geratenes ist als geraten erkennbar -----------------------------
+# --- 2. A guess is recognisable as a guess ------------------------------
 
 def test_geratener_gipfel_bekommt_ein_fragezeichen():
     werte = {"temperature_2m": 3.0, "relative_humidity_2m": 60,
@@ -115,7 +115,7 @@ def test_geratener_gipfel_bekommt_ein_fragezeichen():
     unsicher = h_berg.render(berg, werte, geraten=True)
     assert "?" not in sicher
     assert "?" in unsicher
-    # Genau ein Zeichen teurer -- die Sendezeit ist knapp.
+    # Exactly one character more expensive -- airtime is tight.
     assert len(unsicher) == len(sicher) + 1
 
 
@@ -126,7 +126,7 @@ def test_geratener_ort_bekommt_ein_fragezeichen():
 
 
 def test_tippfehler_wird_als_geraten_gemeldet():
-    """`vilach` findet weiter Villach -- sagt aber, dass es geraten hat."""
+    """`vilach` still finds Villach -- but says that it guessed."""
     b = _bot()
     treffer = h_wx.resolve_place_stufe("vilach", b.stations, b.settings.default_location)
     assert treffer is not None
@@ -135,15 +135,15 @@ def test_tippfehler_wird_als_geraten_gemeldet():
                                     b.settings.default_location)[2] == "exakt"
 
 
-# --- 3. Echte Orte ausserhalb, echte Luecken innerhalb -------------------
+# --- 3. Real places outside, real gaps inside ---------------------------
 
 @pytest.mark.parametrize("ort", ["hamburg", "wien", "lienz", "muenchen", "ljubljana"])
 def test_orte_ausserhalb_werden_nicht_auf_kaernten_geraten(ort):
-    """Aus dem Kanal: `!wx hamburg` lieferte Haimburg bei Voelkermarkt.
+    """From the channel: `!wx hamburg` returned Haimburg near Voelkermarkt.
 
-    Keine Aehnlichkeitsschwelle trennt das -- gemessen liegt
-    `hamburg -> haimburg` bei 0.933 und damit hoeher als der echte Tippfehler
-    `vilach -> villach` (0.923). Also eine Tabelle.
+    No similarity threshold separates these -- measured, `hamburg -> haimburg`
+    scores 0.933 and is therefore higher than the genuine typo
+    `vilach -> villach` (0.923). Hence a table.
     """
     b = _bot()
     assert h_wx.resolve_place_stufe(ort, b.stations, b.settings.default_location) is None
@@ -159,7 +159,7 @@ def test_absage_fuer_ausserhalb_passt_ins_nutzlimit():
 
 @pytest.mark.parametrize("berg", ["petzen", "kornock", "falkert"])
 def test_fehlende_berge_werden_nicht_durch_fremde_ersetzt(berg):
-    """Petzen wurde zu "Pletzen", Kornock zu "Koflernock" -- andere Berge."""
+    """Petzen became "Pletzen", Kornock became "Koflernock" -- other mountains."""
     g, stufe = h_berg.suche_stufe(IDX, berg)
     assert g is None, f"{berg} wurde durch {g and g['name']} ersetzt"
     assert stufe == "fehlt"
@@ -167,25 +167,25 @@ def test_fehlende_berge_werden_nicht_durch_fremde_ersetzt(berg):
 
 
 def test_kein_eintrag_in_fehlt_steht_auch_im_verzeichnis():
-    """Sonst sperrt die Luecken-Tabelle einen Berg aus, den es gibt."""
+    """Otherwise the gap table locks out a mountain that exists."""
     for name in h_berg.FEHLT:
         assert name not in IDX, f"{name} steht im Verzeichnis, gehoert nicht in FEHLT"
 
 
-# --- Die Trennung selbst ------------------------------------------------
+# --- The separation itself ----------------------------------------------
 
 def test_wx_bleibt_beim_ort_und_beim_sicheren_berg():
-    """Ohne Netz geprueft: nur die Aufloesung, nicht der Abruf."""
+    """Checked without network: resolution only, not the fetch."""
     b = _bot()
     ort = h_wx.resolve_place_stufe("villach", b.stations, b.settings.default_location,
                                    fuzzy=False)
     assert ort is not None and ort[2] == "exakt"
-    # Berg exakt -- `!wx goldeck` ist so angekuendigt und muss weiter gehen
+    # Summit exact -- `!wx goldeck` was announced that way and must keep working
     assert h_berg.suche_stufe(IDX, "goldeck", fuzzy=False)[1] == "exakt"
 
 
 def test_wx_raet_nicht_mehr_ueber_das_gipfelverzeichnis():
-    """Die zweite Bergsuche mit Aehnlichkeit ist raus -- sie war die Fehlerquelle."""
+    """The second, similarity-based summit search is gone -- it was the culprit."""
     b = _bot()
     for frage in ("eckwand", "lienz"):
         antwort = run(b.cmd_wx(frage, "x"))
@@ -200,12 +200,12 @@ def test_gipfel_ist_ein_eigener_befehl_mit_hilfe_und_usage():
     assert ALIASES["berg"] == "gipfel"
     assert "gipfel" in Bot.HILFE and "gipfel" in Bot.USAGE
     assert any("gipfel" in liste for liste in Bot.GRUPPEN.values())
-    # Ohne Argument kommt die Verwendung, nicht Schweigen.
+    # Without an argument comes the usage line, not silence.
     assert run(b.cmd_gipfel("", "x")) == b.usage("gipfel")
 
 
 def test_summit_bleibt_bei_sota():
-    """`!summit` war vor !gipfel da und zeigt weiter auf !sota."""
+    """`!summit` predates !gipfel and still points at !sota."""
     from meshbot.router import ALIASES
     assert ALIASES["summit"] == "sota"
 
@@ -230,16 +230,16 @@ def test_version_nennt_nummer_und_aenderung():
 
 
 def test_verlauf_beginnt_mit_der_aktuellen_version():
-    """Eine Version, die im Verlauf fehlt, ist beim Ausrollen nicht nachvollziehbar."""
+    """A version missing from the history cannot be traced during a rollout."""
     from meshbot import version
 
     assert version.VERLAUF[0][0] == version.VERSION
 
 
-# --- Ortssuche ausserhalb Kaerntens -------------------------------------
+# --- Place lookup outside Carinthia -------------------------------------
 #
-# Ohne Netz geprueft: Die Kandidatenlisten sind die echten Antworten der
-# Geocoding-API, gekuerzt auf die Felder, die die Auswahl braucht.
+# Checked without network: the candidate lists are the real answers of the
+# geocoding API, trimmed to the fields the selection needs.
 
 def _k(name, land, lat, lon, pop=0):
     return {"name": name, "country_code": land, "latitude": lat,
@@ -262,14 +262,14 @@ VILACH = [_k("Vilachá", "ES", 42.5, -7.3, 5)]
 
 
 def test_exakter_name_schlaegt_die_groessere_einwohnerzahl():
-    """Nur nach Einwohnerzahl gewaehlt gewinnt bei "Petzen" das Petzenkirchen."""
+    """Chosen by population alone, "Petzen" is won by Petzenkirchen."""
     from meshbot.handlers import ortsuche as h_ort
     treffer = h_ort.waehle(PETZEN, "petzen")
     assert treffer["name"] != "Petzenkirchen"
 
 
 def test_naehe_entscheidet_bei_gleichem_namen():
-    """"Peca" heisst ein Berg in den Karawanken und ein Ort in Indonesien."""
+    """"Peca" is a mountain in the Karawanks and a place in Indonesia."""
     from meshbot.handlers import ortsuche as h_ort
     assert h_ort.waehle(LIENZ, "lienz")["country_code"] == "AT"
     peca = [_k("Peca", "ID", -6.9, 107.6), _k("Peca", "AT", 46.45, 14.77)]
@@ -283,20 +283,20 @@ def test_einwohnerzahl_entscheidet_wenn_nichts_in_der_naehe_liegt():
 
 
 def test_ortsalias_findet_den_berg_statt_des_dorfes():
-    """Die Petzen steht im Ortsverzeichnis als "Peca"."""
+    """The Petzen is listed in the gazetteer as "Peca"."""
     from meshbot.handlers import ortsuche as h_ort
     assert h_ort.waehle(PETZEN, "petzen")["name"] == "Peca"
 
 
 def test_nur_exakt_laesst_den_tippfehler_durch_zur_kaerntensuche():
-    """Sonst wird aus `vilach` das spanische Vilachá mit fuenf Einwohnern.
+    """Otherwise `vilach` becomes the Spanish Vilachá, population five.
 
-    Die exakte Stufe muss hier **nichts** liefern, damit `cmd_wx` danach das
-    Kaerntner Ortsverzeichnis mit Tippfehlertoleranz fragen kann.
+    The exact stage must return **nothing** here so that `cmd_wx` can then ask
+    the Carinthian place directory with typo tolerance.
     """
     from meshbot.handlers import ortsuche as h_ort
     assert h_ort.waehle(VILACH, "vilach", nur_exakt=True) is None
-    # Als letzte Stufe darf derselbe Treffer kommen -- dann aber markiert.
+    # As the last stage the same hit may come back -- marked, though.
     assert h_ort.waehle(VILACH, "vilach", nur_exakt=False) is not None
 
 
@@ -310,14 +310,14 @@ def test_antwort_nennt_land_und_ist_als_modell_erkennbar():
     assert len(text) <= Settings().nutzlimit
 
 
-# --- Umlaute -----------------------------------------------------------
+# --- Umlauts -----------------------------------------------------------
 
 def test_ortsnamen_werden_geschrieben_wie_der_ort_heisst():
-    """Der Schluessel bleibt umlautfrei, die Antwort nicht.
+    """The key stays umlaut-free, the answer does not.
 
-    Gesucht wird ueber "noetsch", damit auch findet, wer keinen Umlaut tippt --
-    gefunkt wird "Nötsch". Vorher war der Suchschluessel zugleich der
-    Anzeigename, und der Ort hiess in jeder Antwort falsch.
+    Lookup runs via "noetsch" so that whoever types no umlaut still finds it --
+    what goes on the air is "Nötsch". The lookup key used to double as the
+    display name, and the place was misspelled in every answer.
     """
     b = _bot()
     orte = b.stations["orte"]
@@ -338,12 +338,12 @@ def test_antwort_zeigt_den_anzeigenamen():
     werte = {"TL": 20.4, "RF": 82, "FFAM": 2.2, "DD": 90}
     text = h_wx.render("noetsch", werte, station="Bad Bleiberg", anzeige="Nötsch")
     assert text.startswith("WX Nötsch (Bad Bleiberg):")
-    # Ohne Anzeigenamen bleibt es beim Schluessel -- alte Dateien gehen weiter.
+    # Without a display name the key is used -- old files keep working.
     assert h_wx.render("noetsch", werte).startswith("WX Noetsch:")
 
 
 def test_umlaute_werden_nicht_mehr_umgeschrieben():
-    """Vorgabe und mitgeliefertes .env muessen zusammenpassen."""
+    """The default and the shipped .env have to agree."""
     from meshbot.formatting import prepare
     s = Settings()
     assert s.transliterate is False
@@ -351,15 +351,15 @@ def test_umlaute_werden_nicht_mehr_umgeschrieben():
 
 
 def test_sota_verbandskuerzel_bleiben_ascii():
-    """"OE" ist ein Verbandscode, kein umgeschriebenes "Ö"."""
+    """"OE" is an association code, not a transliterated "Ö"."""
     from meshbot.main import Bot
     assert Settings().sota_default_assoc.startswith("OE")
-    # Die Gipfelrefs selbst: OE/KT-077, nicht Ö/KT-077.
+    # The summit refs themselves: OE/KT-077, not Ö/KT-077.
     assert all(g["ref"][0] != "Ö" for g in GIPFEL)
 
 
 def test_ohne_ortsuche_bleibt_die_kaerntensuche_erhalten():
-    """Faellt die Fremdquelle aus, darf ein Kaerntner Tippfehler nicht mit ihr fallen."""
+    """If the external source fails, a Carinthian typo must not fail with it."""
     b = _bot(ohne_ortsuche=True)
     treffer = h_wx.resolve_place_stufe("vilach", b.stations, b.settings.default_location)
     assert treffer is not None and treffer[2] == "geraten"

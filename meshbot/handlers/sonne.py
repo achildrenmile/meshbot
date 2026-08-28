@@ -1,12 +1,12 @@
-"""!sonne — Sonnenauf- und -untergang für eine Position.
+"""!sonne — sunrise and sunset for a position.
 
-Bewusst ohne externe Quelle: reine Rechnung nach dem NOAA-Sonnenstandsalgorithmus.
-Damit funktioniert der Befehl auch dann, wenn der Bot kein Internet hat — und er
-antwortet ohne Wartezeit.
+Deliberately without an external source: pure arithmetic following the NOAA
+solar position algorithm. That way the command works even when the bot has no
+internet — and it answers without any wait.
 
-Zurückgegeben werden Aufgang, Untergang und das Ende der bürgerlichen Dämmerung,
-weil Letzteres auf Tour die eigentlich interessante Zahl ist: bis dahin kommt man
-ohne Stirnlampe vom Berg.
+Returned are sunrise, sunset and the end of civil twilight, because on a tour
+the last of those is the number that actually matters: until then you can get
+off the mountain without a headlamp.
 """
 
 from __future__ import annotations
@@ -19,13 +19,13 @@ ZENIT_DAEMMERUNG = 96.0     # bürgerliche Dämmerung
 
 
 def _ereignis(tag: date, lat: float, lon: float, zenit: float, aufgang: bool) -> datetime | None:
-    """Zeitpunkt eines Sonnenereignisses in UTC, oder None wenn es ihn nicht gibt.
+    """Time of a solar event in UTC, or None when it does not occur.
 
-    Sonnenstandsgleichung nach NOAA. `None` steht fuer Polartag oder Polarnacht —
-    in Kaernten nie, weiter noerdlich sehr wohl.
+    Solar position equation after NOAA. `None` stands for polar day or polar
+    night — never in Carinthia, but certainly further north.
     """
     n = tag.toordinal() - date(2000, 1, 1).toordinal()
-    # Westliche Laenge ist positiv in dieser Gleichung, oestliche negativ.
+    # Western longitude is positive in this equation, eastern negative.
     j_stern = n + 0.0009 + (-lon) / 360
 
     m = (357.5291 + 0.98560028 * j_stern) % 360                  # mittlere Anomalie
@@ -41,7 +41,7 @@ def _ereignis(tag: date, lat: float, lon: float, zenit: float, aufgang: bool) ->
     zaehler = math.cos(math.radians(zenit)) - math.sin(math.radians(lat)) * math.sin(math.radians(dek))
     nenner = math.cos(math.radians(lat)) * math.cos(math.radians(dek))
     if nenner == 0 or abs(zaehler / nenner) > 1:
-        return None                                              # Sonne geht nicht auf oder unter
+        return None                                              # the sun neither rises nor sets
     stundenwinkel = math.degrees(math.acos(zaehler / nenner))
 
     jd = j_transit + (-stundenwinkel if aufgang else stundenwinkel) / 360
@@ -58,7 +58,7 @@ def berechne(lat: float, lon: float, jetzt: datetime) -> dict[str, datetime | No
 
 
 def render(werte: dict[str, datetime | None], jetzt: datetime, tz_offset_h: int = 2) -> str:
-    """Ortszeit ausgeben — auf Tour interessiert niemanden UTC."""
+    """Print local time — on a tour nobody cares about UTC."""
     def hm(dt: datetime | None) -> str:
         if dt is None:
             return "--:--"

@@ -1,26 +1,26 @@
-"""!quota — wie viele Sendungen gehen diese Stunde noch?
+"""!quota — how many transmissions are left this hour?
 
-Aliase: `!kontingent`, `!rest`. Der kurze Name ist die Hauptform, weil die
-Uebersicht von `!help` alle Befehle in eine Nachricht bringen soll — mit
-`kontingent` als Hauptnamen platzt sie und faellt auf ein Themenmenue zurueck.
+Aliases: `!kontingent`, `!rest`. The short name is the primary one because the
+`!help` overview should fit every command into one message — with `kontingent`
+as the primary name it bursts and falls back to a topic menu.
 
-Zwischen Bot und Funknetz sitzt das Gate des meshinfra-Stacks und laesst pro
-Stunde nur eine feste Zahl Sendungen durch. Alles darueber wird **verworfen,
-nicht gepuffert** — wer ins Limit laeuft, merkt es sonst gar nicht: Der Bot
-schweigt, das Sendefenster meldet trotzdem Erfolg.
+Between the bot and the radio network sits the meshinfra stack's gate, which
+lets only a fixed number of transmissions through per hour. Anything beyond that
+is **discarded, not buffered** — otherwise running into the limit goes
+unnoticed: the bot stays silent while the send window still reports success.
 
-Der Stand kommt nicht aus einer Nachfrage, sondern liegt schon da: Das Gate
-veroeffentlicht ihn retained auf `meshinfra/gate/quota`, der Bot hoert nur mit.
-Die Abfrage selbst kostet deshalb keine Anfrage nach aussen — aber sehr wohl
-**eine Sendung**, denn die Antwort geht durchs selbe Gate. Genau darum steht
-das in der Antwort mit drin.
+The reading does not come from a query, it is already there: the gate publishes
+it retained on `meshinfra/gate/quota` and the bot merely listens. Asking
+therefore costs no outbound request — but it does cost **one transmission**,
+because the answer goes through the same gate. Which is exactly why the answer
+says so.
 
-Zwei Bremsen, zwei Zahlen:
+Two brakes, two numbers:
 
-* **Gate** — geteiltes Kontingent fuer alles, was aus der IT ins Netz sendet:
-  Bot, Sendefenster, Alarme
-* **Bot** — eigener Token-Bucket nur fuer Botantworten, deutlich kuerzeres
-  Fenster
+* **Gate** — shared quota for everything transmitting from the IT side into the
+  network: bot, send window, alarms
+* **Bot** — its own token bucket for bot answers alone, with a much shorter
+  window
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ from typing import Any
 
 
 def parse(payload: bytes | str) -> dict[str, Any] | None:
-    """Quota-Meldung des Gates lesen. None, wenn sie nicht brauchbar ist."""
+    """Read the gate's quota message. None when it is not usable."""
     if isinstance(payload, bytes):
         payload = payload.decode("utf-8", errors="replace")
     try:
@@ -52,13 +52,13 @@ def _dauer(sekunden: int) -> str:
 
 def render(gate: dict[str, Any] | None, bot_frei: int, bot_limit: int,
            bot_fenster_s: int) -> str:
-    """Eine Zeile, Gate zuerst - das ist die Bremse, die wirklich beisst."""
+    """One line, gate first - that is the brake that actually bites."""
     bot = f"Bot {bot_frei}/{bot_limit} pro {_dauer(bot_fenster_s)}"
 
     if gate is None:
-        # Kein retained Wert: entweder ist das Gate nie gelaufen, seit der
-        # Broker lebt, oder es veroeffentlicht auf einem anderen Topic. Beides
-        # ist eine ehrliche Absage wert statt einer erfundenen Zahl.
+        # No retained value: either the gate has never run since the broker came
+        # up, or it publishes on a different topic. Both deserve an honest
+        # refusal rather than an invented number.
         return f"Kontingent: Gate meldet nichts. {bot}"
 
     frei = int(gate.get("remaining", 0))
@@ -70,7 +70,7 @@ def render(gate: dict[str, Any] | None, bot_frei: int, bot_limit: int,
         wann = f", naechster Platz in {_dauer(wartezeit)}" if wartezeit else ""
         return f"Kontingent: 0/{limit} pro {fenster} - voll{wann}. {bot}"
 
-    # Diese Antwort laeuft selbst durchs Gate. Wer '3 frei' liest und drei
-    # Nachrichten plant, hat sich um eine vertan.
+    # This answer goes through the gate itself. Reading "3 frei" and planning
+    # three messages is off by one.
     return (f"Kontingent: {frei}/{limit} pro {fenster} frei "
             f"(inkl. dieser Antwort). {bot}")

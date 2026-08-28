@@ -29,7 +29,7 @@ def test_leeres_dokument_wirft():
 
 
 def test_teildokument_liefert_was_da_ist():
-    """Ein fehlendes Feld darf nicht die ganze Antwort kosten."""
+    """A missing field must not cost the whole answer."""
     client = httpx.AsyncClient(transport=httpx.MockTransport(
         lambda r: httpx.Response(200, text="<solar><solarflux>90</solarflux></solar>")))
     assert dx.render(run(dx.fetch(client, "https://x"))) == "DX: SFI 90"

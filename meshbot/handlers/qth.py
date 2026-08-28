@@ -1,8 +1,8 @@
-"""!qth — Maidenhead-Locator in Koordinaten und zurueck.
+"""!qth — Maidenhead locator to coordinates and back.
 
-Reine Rechnung, keine Quelle. Im Amateurfunk ist der Locator die uebliche
-Standortangabe, im Mesh sind es Dezimalgrade — der Befehl uebersetzt zwischen
-beiden Welten.
+Pure arithmetic, no source. In amateur radio the locator is the customary way to
+state a position, on the mesh it is decimal degrees — this command translates
+between the two worlds.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ LOCATOR = re.compile(r"^[A-R]{2}\d{2}([A-X]{2})?(\d{2})?$", re.I)
 
 
 def to_locator(lat: float, lon: float, stellen: int = 6) -> str:
-    """Koordinaten -> Locator. 6 Stellen entsprechen rund 5 x 4 km."""
+    """Coordinates -> locator. Six characters correspond to roughly 5 x 4 km."""
     lon += 180.0
     lat += 90.0
     gross = string.ascii_uppercase
@@ -26,7 +26,7 @@ def to_locator(lat: float, lon: float, stellen: int = 6) -> str:
 
 
 def from_locator(loc: str) -> tuple[float, float] | None:
-    """Locator -> Mittelpunkt des Feldes. None bei ungueltiger Eingabe."""
+    """Locator -> centre of the field. None on invalid input."""
     loc = loc.strip().upper()
     if not LOCATOR.match(loc):
         return None

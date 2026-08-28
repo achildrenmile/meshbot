@@ -1,12 +1,12 @@
-"""Erzeugt das Ortsverzeichnis fuer den MeshBot aus OSM-Ortsknoten (Kaernten).
+"""Build the MeshBot place directory from OSM place nodes (Carinthia).
 
-Schreibt data/stations_ktn.json neu — Stationsliste und gepflegte Eintraege
-bleiben, das Ortsverzeichnis wird ersetzt. Quelle: OpenStreetMap, ODbL.
+Rewrites data/stations_ktn.json — the station list and hand-maintained entries
+survive, the place directory is replaced. Source: OpenStreetMap, ODbL.
 
-    python3 tools/build_orte.py [ziel] [gepflegte-orte]
+    python3 tools/build_orte.py [target] [curated-places]
 
-Zwei Abfragen, beide mit Bounding-Box — eine Suche allein ueber das Tag
-`ISO3166-2` laeuft bei Overpass in den Timeout.
+Two queries, both with a bounding box — searching by the `ISO3166-2` tag alone
+runs into a timeout at Overpass.
 """
 
 import json
@@ -32,18 +32,18 @@ out geom;"""
 RANG = {"city": 6, "town": 5, "village": 4, "suburb": 3,
         "hamlet": 2, "isolated_dwelling": 1}
 
-# Ortsnamen bekommen nur Talstationen. Arnoldstein liegt auf 580 m, die
-# Villacher Alpe auf 2117 m und ist trotzdem die naechste Station — ohne diese
-# Grenze antwortet "!wx arnoldstein" mit zehn Grad zu wenig. Wer die Bergwerte
-# will, fragt mit Position; dort gilt die Grenze nicht.
+# Place names only get valley stations. Arnoldstein sits at 580 m, the Villacher
+# Alpe at 2117 m and is still the nearest station — without this limit
+# "!wx arnoldstein" answers ten degrees too cold. Anyone wanting the summit
+# values asks with a position; the limit does not apply there.
 TALGRENZE_M = 1100.0
 
 
 def frage(query: str, versuche: int = 4) -> dict:
-    """Overpass ist ein freier Dienst und wehrt Last mit 504 ab.
+    """Overpass is a free service and fends off load with a 504.
 
-    Das ist kein Fehler, sondern eine Bitte um Geduld — also warten und
-    wiederholen, statt den Lauf abzubrechen.
+    That is not an error but a request for patience — so wait and retry instead
+    of aborting the run.
     """
     daten = urllib.parse.urlencode({"data": query}).encode()
     req = urllib.request.Request(OVERPASS, data=daten,
@@ -62,10 +62,10 @@ def frage(query: str, versuche: int = 4) -> dict:
 
 
 def kanten(grenze: dict) -> list[tuple[float, float, float, float]]:
-    """Alle Grenzsegmente als (lat1, lon1, lat2, lon2).
+    """All border segments as (lat1, lon1, lat2, lon2).
 
-    Die Ringe muessen nicht sortiert sein: der Strahlensatz-Test zaehlt nur
-    Schnitte, und Loecher (role=inner) heben sich dabei von selbst auf.
+    The rings need not be sorted: the ray-casting test only counts crossings,
+    and holes (role=inner) cancel themselves out in the process.
     """
     out = []
     for rel in grenze["elements"]:
@@ -94,8 +94,8 @@ def distanz_km(lat1, lon1, lat2, lon2):
     return 2 * r * math.asin(math.sqrt(a))
 
 
-# "(ehem.) Hader", "Bach (Zweinitz)": OSM haengt Zusaetze in Klammern an. Der
-# Zusatz ist keine Ortsangabe, unter der jemand fragt.
+# "(ehem.) Hader", "Bach (Zweinitz)": OSM appends qualifiers in parentheses.
+# The qualifier is not a name anyone asks under.
 KLAMMER = re.compile(r"\s*\([^)]*\)")
 
 
@@ -105,16 +105,16 @@ def normalisiere(name: str) -> str:
                      ("š", "s"), ("č", "c"), ("ž", "z"),
                      (".", " "), ("-", " "), ("'", ""), ("`", "")):
         s = s.replace(alt, neu)
-    # "Bad Sankt Leonhard" und "Bad St. Leonhard" sind derselbe Ort.
+    # "Bad Sankt Leonhard" and "Bad St. Leonhard" are the same place.
     return " ".join("st" if w == "sankt" else w for w in s.split())
 
 
 def main(ziel: str, gepflegt_datei: str) -> None:
-    """Erzeugt `ziel` neu — Ein- und Ausgabedatei sind dieselbe.
+    """Regenerates `ziel` — input and output file are the same one.
 
-    Die Stationsliste wird uebernommen, das Ortsverzeichnis komplett ersetzt.
-    Wuerde stattdessen der alte Bestand als Vorgabe gelten, ueberlebte jeder
-    einmal erzeugte Eintrag jeden weiteren Lauf — auch ein falscher.
+    The station list is carried over, the place directory replaced wholesale.
+    Were the old contents used as a starting point instead, every entry ever
+    generated would survive every later run — including a wrong one.
     """
     with open(ziel, encoding="utf-8") as fh:
         daten = json.load(fh)
@@ -130,25 +130,25 @@ def main(ziel: str, gepflegt_datei: str) -> None:
     elemente = [e for e in elemente if drinnen(e["lat"], e["lon"], grenze)]
     print(f"davon in Kaernten: {len(elemente)}", file=sys.stderr)
 
-    # Bei gleichem Namen gewinnt der groessere Ort (Stadt vor Weiler).
+    # On equal names the larger place wins (town before hamlet).
     beste: dict[str, tuple[int, dict]] = {}
     for el in elemente:
         tags = el.get("tags", {})
         namen = [tags[k] for k in ("name", "name:de", "name:sl", "alt_name") if tags.get(k)]
         rang = RANG.get(tags.get("place", ""), 0)
         for roh in namen:
-            # Zweisprachige Schilder stehen in OSM als "Feistritz ob Bleiburg /
-            # Bistrica pri Pliberku" in einem Feld. Beide Haelften sind eigene
-            # Ortsnamen, unter denen jemand fragen kann.
+            # Bilingual signs appear in OSM as "Feistritz ob Bleiburg /
+            # Bistrica pri Pliberku" in one field. Both halves are place names
+            # in their own right that somebody may ask under.
             for teil in roh.replace("\uff0f", "/").replace("/", ";").split(";"):
                 key = normalisiere(teil)
                 if len(key) < 3:
                     continue
                 if key not in beste or rang > beste[key][0]:
-                    # Die Originalschreibweise mitfuehren: Der Schluessel ist
-                    # umlautfrei, damit "noetsch" und "Noetsch" denselben
-                    # Eintrag finden -- gefunkt wird aber "Noetsch im Gailtal"
-                    # so, wie der Ort heisst.
+                    # Carry the original spelling along: the key is umlaut-free
+                    # so that "noetsch" and "nötsch" find the same entry -- but
+                    # what goes on the air is "Nötsch im Gailtal", the way the
+                    # place is actually called.
                     beste[key] = (rang, el, teil.strip())
 
     tal = [s for s in stationen if s["hoehe"] <= TALGRENZE_M]
@@ -156,11 +156,11 @@ def main(ziel: str, gepflegt_datei: str) -> None:
     weit = []
     for key, (_rang, el, anzeige) in beste.items():
         lat, lon = el["lat"], el["lon"]
-        # Ausnahme von der Talgrenze: Mallnitz liegt selbst auf 1200 m,
-        # Flattnitz auf 1400, und die Station traegt den Namen des Ortes. Sie
-        # ins Tal zu schicken waere schlechter als die Hoehe. Naehe allein
-        # taugt nicht als Kriterium — die Kanzelhoehe steht zwei Kilometer von
-        # Annenheim entfernt und tausend Meter darueber.
+        # Exception to the valley limit: Mallnitz itself sits at 1200 m,
+        # Flattnitz at 1400, and the station carries the name of the place.
+        # Sending it down into the valley would be worse than the altitude.
+        # Proximity alone is no criterion — the Kanzelhöhe stands two kilometres
+        # from Annenheim and a thousand metres above it.
         naechste = min(stationen, key=lambda s: distanz_km(lat, lon, s["lat"], s["lon"]))
         heisst_so = normalisiere(naechste["name"]).split()[:1] == [key]
         if naechste["hoehe"] > TALGRENZE_M and heisst_so:
@@ -172,13 +172,13 @@ def main(ziel: str, gepflegt_datei: str) -> None:
             weit.append((round(d), key, st["name"]))
         orte[key] = {"station_id": st["id"], "station": st["name"],
                      "lat": round(lat, 5), "lon": round(lon, 5)}
-        # Nur speichern, wenn sie sich vom Schluessel unterscheidet -- sonst
-        # blaeht ein zweiter, gleicher Name die Datei um 3199 Eintraege auf.
+        # Only stored when it differs from the key -- otherwise a second,
+        # identical name inflates the file by 3199 entries.
         if anzeige and anzeige.lower() != key:
             orte[key]["anzeige"] = anzeige
 
-    # Jede Station ist auch selbst ein Ort — sonst scheitert `!wx arriach`.
-    # Hier auch die Bergstationen: wer "Villacher Alpe" tippt, meint sie.
+    # Every station is a place in its own right — otherwise `!wx arriach` fails.
+    # Summit stations included here: typing "Villacher Alpe" means that station.
     for st in stationen:
         orte.setdefault(normalisiere(st["name"]), {
             "station_id": st["id"], "station": st["name"],
@@ -187,8 +187,8 @@ def main(ziel: str, gepflegt_datei: str) -> None:
     for d, key, name in sorted(weit, reverse=True)[:10]:
         print(f"weit weg: {key} -> {name} ({d} km)", file=sys.stderr)
 
-    # Die gepflegten Eintraege gewinnen: dort steht bewusst eine bestimmte
-    # Station (z. B. "gailtal" -> Hermagor), das darf OSM nicht ueberschreiben.
+    # The curated entries win: they deliberately name a particular station
+    # (e.g. "gailtal" -> Hermagor), and OSM must not overwrite that.
     orte.update(bestand)
 
     daten["orte"] = dict(sorted(orte.items()))
@@ -197,11 +197,11 @@ def main(ziel: str, gepflegt_datei: str) -> None:
 
 
 def schreibe(daten: dict, ziel: str) -> None:
-    """Ein Ort je Zeile.
+    """One place per line.
 
-    `indent` blaeht die Datei auf sechs Zeilen je Ort, `separators` presst
-    alles in eine einzige — beides macht die Datei im Diff unlesbar. Ein
-    dreitausendzeiliges Verzeichnis liest sich dagegen wie eine Liste.
+    `indent` inflates the file to six lines per place, `separators` squeezes
+    everything onto a single one — both make the file unreadable in a diff. A
+    three-thousand-line directory, by contrast, reads like a list.
     """
     def zeilen(d: dict) -> str:
         inhalt = ",\n".join(f"  {json.dumps(k, ensure_ascii=False)}: "

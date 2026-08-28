@@ -1,7 +1,7 @@
-"""MQTT-Anbindung mit automatischem Wiederverbinden.
+"""MQTT connection with automatic reconnect.
 
-paho läuft in einem eigenen Thread, der Bot im Eventloop — deshalb geht jede
-eingehende Nachricht über `run_coroutine_threadsafe` zurück in den Loop.
+paho runs in a thread of its own, the bot in the event loop — which is why every
+incoming message travels back into the loop via `run_coroutine_threadsafe`.
 """
 
 from __future__ import annotations
@@ -55,7 +55,7 @@ class MqttClient:
     def publish(self, topic: str, payload: str) -> None:
         self._client.publish(topic, payload, qos=1, retain=False)
 
-    # --- Callbacks (paho-Thread) -----------------------------------------
+    # --- Callbacks (paho thread) -----------------------------------------
 
     def _handle_connect(self, client: Any, userdata: Any, flags: Any, rc: Any, properties: Any = None) -> None:
         if rc != 0:

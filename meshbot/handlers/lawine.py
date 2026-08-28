@@ -1,10 +1,10 @@
-"""!lawine — Lawinenwarnstufe aus dem EAWS-Bulletin.
+"""!lawine — avalanche danger level from the EAWS bulletin.
 
-Quelle: static.avalanche.report, das gemeinsame Bulletin der europaeischen
-Warndienste im EAWS-Format. Kaernten ist die Region `AT-02`.
+Source: static.avalanche.report, the joint bulletin of the European warning
+services in EAWS format. Carinthia is region `AT-02`.
 
-Ausserhalb der Saison gibt es kein Bulletin — das ist kein Fehler und wird auch
-so beantwortet.
+Outside the season there is no bulletin — that is not an error, and the answer
+says so.
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ def url_fuer(tag: date, region: str = "AT-02") -> str:
 
 
 async def fetch(client: httpx.AsyncClient, tag: date, region: str = "AT-02") -> list[dict[str, Any]] | None:
-    """None heisst: kein Bulletin fuer diesen Tag (Sommer, oder noch nicht da)."""
+    """None means: no bulletin for this day (summer, or not published yet)."""
     resp = await client.get(url_fuer(tag, region))
     if resp.status_code == 404:
         return None
@@ -45,7 +45,7 @@ def _hoehe(rating: dict[str, Any]) -> str:
 def render(bulletins: list[dict[str, Any]] | None) -> str:
     if not bulletins:
         return "Lawine KTN: kein Bulletin (ausserhalb der Saison)"
-    # Hoechste Stufe zaehlt - im Zweifel die vorsichtigere Angabe.
+    # The highest level counts - when in doubt, the more cautious figure.
     reihenfolge = list(STUFE)
     beste: tuple[int, str, str] | None = None
     for b in bulletins:

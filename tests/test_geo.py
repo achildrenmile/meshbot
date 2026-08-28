@@ -1,4 +1,4 @@
-"""Geometrie, Gelaendeprofil und die beiden kleinen Befehle darauf."""
+"""Geometry, terrain profile and the two small commands built on them."""
 
 import math
 
@@ -19,7 +19,7 @@ def test_koordinatenpaare_aus_beliebigem_text():
 def test_zu_wenige_zahlen_ist_kein_treffer():
     assert geo.parse_punkte("46.6,13.8") is None
     assert geo.parse_punkte("kein wert hier") is None
-    assert geo.parse_punkte("46 13", 1) is None          # ohne Dezimalstelle kein Koordinat
+    assert geo.parse_punkte("46 13", 1) is None          # without a decimal place it is not a coordinate
 
 
 def test_unsinnige_koordinaten_abgelehnt():
@@ -28,7 +28,7 @@ def test_unsinnige_koordinaten_abgelehnt():
 
 
 def test_distanz_gegen_bekannten_wert():
-    """Dobratsch–Gerlitzen sind 18,4 km, nachgerechnet an der Karte."""
+    """Dobratsch–Gerlitzen is 18.4 km, verified against the map."""
     assert geo.distanz_km(DOBRATSCH, GERLITZEN) == pytest.approx(18.4, abs=0.2)
     assert geo.distanz_km(DOBRATSCH, DOBRATSCH) == pytest.approx(0.0)
 
@@ -62,24 +62,24 @@ def test_fresnel_und_kruemmung_wachsen_mit_der_strecke():
 
 
 def _profil(mitte_hoehe: float, n: int = 85) -> list[float]:
-    """Flaches Tal mit einem Hügel in der Mitte."""
+    """A flat valley with a hill in the middle."""
     hoehen = [500.0] * n
     hoehen[n // 2] = mitte_hoehe
     return hoehen
 
 
 def test_freie_strecke_wird_als_frei_erkannt():
-    """Zwei 80-m-Masten ueber flachem Gelaende, 20 km."""
+    """Two 80 m masts over flat terrain, 20 km apart."""
     eng = geo.bewerte_profil(_profil(500), 20.0, 80, 80)
     assert eng["anteil"] >= 0.6
     assert "FREI" in geo.render_sicht(eng)
 
 
 def test_zu_niedrige_masten_sind_nur_knapp():
-    """30 m auf 20 km reichen nicht: Erdkruemmung und Fresnelzone fressen es auf.
+    """30 m over 20 km is not enough: curvature and Fresnel zone eat it up.
 
-    Genau der Fall, den Leute unterschaetzen -- freie Sicht heisst nicht freie
-    Funkstrecke.
+    Exactly the case people underestimate -- a clear view does not mean a clear
+    radio path.
     """
     eng = geo.bewerte_profil(_profil(500), 20.0, 30, 30)
     assert 0 < eng["anteil"] < 0.6
@@ -94,7 +94,7 @@ def test_berg_in_der_mitte_blockiert():
 
 
 def test_knapper_streifschuss_heisst_knapp():
-    """Geometrisch frei, aber die Fresnelzone ist zugebaut."""
+    """Geometrically clear, but the Fresnel zone is obstructed."""
     hoehen = _profil(500)
     eng_frei = geo.bewerte_profil(hoehen, 20.0, 60, 60)
     hoehe_grenzwertig = 500 + eng_frei["frei_m"] - 0.3 * eng_frei["radius"]
@@ -104,7 +104,7 @@ def test_knapper_streifschuss_heisst_knapp():
 
 
 def test_nahbereich_wird_ausgeklammert():
-    """Ein Buckel 100 m vor der Antenne ist Aufstellungssache, kein Streckenproblem."""
+    """A bump 100 m from the antenna is a mounting matter, not a path problem."""
     n = 85
     hoehen = [500.0] * n
     hoehen[1] = 5000.0                       # direkt neben dem Standort

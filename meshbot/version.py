@@ -1,28 +1,28 @@
-"""Version des Bots und was sich zuletzt geaendert hat.
+"""The bot's version and what changed most recently.
 
-Warum eine Datei und keine Git-Beschreibung: Im Funknetz sieht niemand das
-Repository. Wer meldet "der Bot antwortet komisch", muss sagen koennen, **welcher**
-Bot -- sonst wird jede Fehlersuche zum Ratespiel darueber, ob die Ausrollung
-ueberhaupt angekommen ist.
+Why a file and not a git description: nobody on the radio can see the
+repository. Someone reporting "the bot is answering oddly" has to be able to say
+**which** bot -- otherwise every investigation starts with guessing whether the
+deployment even arrived.
 
-`KURZ` ist kein Changelog, sondern eine Funkmeldung: Sie muss in eine Nachricht
-passen und beantwortet genau eine Frage -- was ist seit dem letzten Mal anders.
-Alles Ausfuehrliche steht im Wiki.
+`KURZ` is not a changelog but a radio message: it has to fit into one
+transmission and answers exactly one question -- what is different since last
+time. Everything detailed lives in the wiki.
 
-Zaehlweise: Vorne bei einer Umstellung, die bestehende Befehle anders antworten
-laesst, in der Mitte bei einem neuen Befehl, hinten bei einer Reparatur.
+Counting: major for a change that makes existing commands answer differently,
+minor for a new command, patch for a fix.
 """
 
 from __future__ import annotations
 
 VERSION = "1.5.0"
 
-# Eine Zeile, Funknetz-tauglich. Nicht laenger als noetig -- der Kopf
-# "MeshBot <version>: " geht davon ab.
+# One line, fit for the radio network. No longer than necessary -- the prefix
+# "MeshBot <version>: " comes off the budget.
 KURZ = "!wx kennt Orte weltweit, !gipfel neu"
 
-# Die letzten Stufen, neueste zuerst. Dient der Fehlersuche im Gespraech
-# ("du hast noch 1.4") und wird nicht gefunkt.
+# The recent releases, newest first. Serves conversational debugging ("you are
+# still on 1.4") and never goes on the air.
 VERLAUF = [
     ("1.5.0", "2026-08-28", "!wx beantwortet Orte ausserhalb Kaerntens (Modell); "
                             "!gipfel getrennt von !wx; Wortgrenze statt Teilstring; "

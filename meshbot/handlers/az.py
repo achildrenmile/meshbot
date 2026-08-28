@@ -1,27 +1,27 @@
-"""!az — stehe ich in der SOTA-Aktivierungszone?
+"""!az — am I inside the SOTA activation zone?
 
-Die Zone ist **keine Kreisfläche** um den Gipfel. Sie ist alles, was höchstens
-25 Höhenmeter unter dem Gipfel liegt und mit ihm zusammenhängt — im Gelände
-also eine krumme Fläche, die sich am Grat entlangzieht und am Steilhang
-abrupt endet.
+The zone is **not a circle** around the summit. It is everything at most 25
+vertical metres below the summit and connected to it — on the ground a crooked
+area that runs along the ridge and stops abruptly at a steep face.
 
-Deshalb wird hier **nicht gerechnet, sondern nachgeschlagen**: SOTLAS stellt
-für jeden Gipfel das fertige Zonenpolygon bereit, erzeugt aus hochauflösenden
-Höhenmodellen und in der SOTA-Gemeinschaft in Gebrauch:
+Which is why this **looks the answer up rather than computing it**: SOTLAS
+publishes the finished zone polygon for every summit, generated from
+high-resolution elevation models and in use across the SOTA community:
 
-    https://az.sotl.as/OE/KT/048.gpx     (WGS84, direkt verwendbar)
-    https://az.sotl.as/OE/KT/048.geojson (EPSG:3035, bräuchte Umprojektion)
+    https://az.sotl.as/OE/KT/048.gpx     (WGS84, usable as is)
+    https://az.sotl.as/OE/KT/048.geojson (EPSG:3035, would need reprojection)
 
-Genommen wird die GPX-Fassung: Sie steht schon in Grad und erspart eine
-eigene Projektionsrechnung — eine Fehlerquelle weniger bei einer Frage, die
-stimmen muss.
+The GPX version is used: it is already in degrees and spares us a projection
+computation of our own — one fewer source of error on a question that has to be
+right.
 
-Der Test ist ein Punkt-in-Polygon nach der Even-odd-Regel über **alle** Ringe
-zusammen. Das erledigt Löcher nebenbei richtig: Wer in einem Loch der Zone
-steht, kreuzt zwei Ränder und liegt damit außerhalb.
+The test is a point-in-polygon by the even-odd rule across **all** rings taken
+together. That handles holes correctly as a side effect: standing in a hole of
+the zone crosses two boundaries and therefore counts as outside.
 
-Was der Bot **nicht** kann: Höhe prüfen. Er sagt, ob deine Position in der
-Fläche liegt. Die Zonengrenze gilt am Boden — wer im Polygon steht, ist drin.
+What the bot **cannot** do: check elevation. It says whether your position lies
+inside the area. The zone boundary applies at ground level — inside the polygon
+means inside.
 """
 
 from __future__ import annotations
@@ -34,12 +34,12 @@ import httpx
 
 AZ_BASIS = "https://az.sotl.as/"
 
-# Weiter weg lohnt die Abfrage nicht. Zonen sind an flachen Gipfelplateaus
-# selten breiter als ein paar hundert Meter.
+# Beyond this the query is not worth making. Even on flat summit plateaus,
+# zones are rarely wider than a few hundred metres.
 MAX_ENTFERNUNG_KM = 3.0
 
-# So viele Gipfel werden der Reihe nach geprueft, naechster zuerst. Zwischen
-# zwei Gipfeln kann der naechstgelegene der falsche sein.
+# This many summits are checked in turn, nearest first. Between two summits the
+# nearest one can be the wrong one.
 MAX_GIPFEL = 3
 
 TRKPT = re.compile(r'lat="([-\d.]+)"\s+lon="([-\d.]+)"')
@@ -47,20 +47,20 @@ TRKSEG = re.compile(r"<trkseg>(.*?)</trkseg>", re.S)
 
 
 class KeineZone(RuntimeError):
-    """Fuer diesen Gipfel liegt bei SOTLAS kein Polygon."""
+    """SOTLAS has no polygon for this summit."""
 
 
 def az_url(ref: str, endung: str = "gpx") -> str:
     """`OE/KT-048` -> `https://az.sotl.as/OE/KT/048.gpx`.
 
-    Nur der **erste** Bindestrich wird ersetzt; Referenzen wie `OE/KT-048`
-    haben ohnehin nur einen, aber die Begrenzung haelt es vorhersagbar.
+    Only the **first** hyphen is replaced; references such as `OE/KT-048` have
+    only one anyway, but the bound keeps it predictable.
     """
     return f"{AZ_BASIS}{ref.replace('-', '/', 1)}.{endung}"
 
 
 async def fetch_zone(client: httpx.AsyncClient, ref: str) -> list[list[tuple[float, float]]]:
-    """Zonenpolygon holen. Wirft `KeineZone`, wenn SOTLAS keins hat."""
+    """Fetch the zone polygon. Raises `KeineZone` when SOTLAS has none."""
     resp = await client.get(az_url(ref), timeout=30.0)
     if resp.status_code == 404:
         raise KeineZone(ref)
@@ -68,7 +68,7 @@ async def fetch_zone(client: httpx.AsyncClient, ref: str) -> list[list[tuple[flo
     ringe = []
     for seg in TRKSEG.findall(resp.text):
         punkte = [(float(a), float(b)) for a, b in TRKPT.findall(seg)]
-        if len(punkte) >= 4:              # weniger ist keine Flaeche
+        if len(punkte) >= 4:              # fewer is not an area
             ringe.append(punkte)
     if not ringe:
         raise KeineZone(ref)
@@ -76,7 +76,7 @@ async def fetch_zone(client: httpx.AsyncClient, ref: str) -> list[list[tuple[flo
 
 
 def innerhalb(punkt: tuple[float, float], ringe: list[list[tuple[float, float]]]) -> bool:
-    """Even-odd ueber alle Ringe gemeinsam - Loecher fallen damit richtig aus."""
+    """Even-odd across all rings together - holes come out right that way."""
     lat, lon = punkt
     drin = False
     for ring in ringe:
@@ -91,11 +91,11 @@ def innerhalb(punkt: tuple[float, float], ringe: list[list[tuple[float, float]]]
 
 def abstand_rand_m(punkt: tuple[float, float],
                    ringe: list[list[tuple[float, float]]]) -> float:
-    """Kuerzester Abstand zum Zonenrand in Metern.
+    """Shortest distance to the zone boundary, in metres.
 
-    Ebene Naeherung mit Breitengrad-Stauchung. Ueber die paar hundert Meter,
-    um die es geht, liegt der Fehler im Zentimeterbereich - die Rasterweite
-    des Polygons ist um Groessenordnungen groeber.
+    Planar approximation with latitude compression. Over the few hundred metres
+    in question the error is centimetres - the polygon's own grid spacing is
+    coarser by orders of magnitude.
     """
     lat, lon = punkt
     mlat = 111320.0
@@ -133,7 +133,7 @@ def _entfernung(m: float) -> str:
 
 
 def render(w: dict[str, Any]) -> str:
-    """Eine Zeile: Urteil zuerst, dann die Zahl, an der es haengt."""
+    """One line: the verdict first, then the number it hangs on."""
     if w["drin"]:
         return (f"AZ {w['ref']} {w['name']} {w['alt']:.0f}m: JA - "
                 f"{_entfernung(w['rand_m'])} bis zum Rand, {w['pts']}Pkt")
@@ -152,11 +152,10 @@ def render_kein_gipfel(dist_km: float | None) -> str:
 
 
 def render_keine_zone(gipfel: dict[str, Any]) -> str:
-    """Kein Polygon bei SOTLAS. Keine Ersatzrechnung, sondern eine Absage.
+    """No polygon at SOTLAS. A refusal, not a substitute computation.
 
-    Eine selbst gerechnete Zone aus einem 25-m-Modell waere hier gefaehrlich:
-    Sie sieht aus wie eine Antwort, taugt aber am Grat genau dort nicht, wo
-    die Frage schwierig wird.
+    A self-computed zone from a 25 m model would be dangerous here: it looks
+    like an answer but fails on the ridge exactly where the question gets hard.
     """
     return (f"AZ {gipfel['ref']}: kein Polygon bei SOTLAS. "
             f"Gipfel {gipfel['alt']:.0f}m, Zone ab {gipfel['alt']-25:.0f}m - selbst messen")

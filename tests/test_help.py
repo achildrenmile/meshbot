@@ -1,4 +1,4 @@
-"""Hilfe und Befehlserkennung — die Teile, die mit jedem neuen Befehl brechen."""
+"""Help and command recognition — the parts that break with every new command."""
 
 import asyncio
 
@@ -22,7 +22,7 @@ def test_jeder_befehl_hat_einen_hilfetext():
 
 
 def test_jeder_befehl_steht_in_einer_gruppe():
-    """Sonst taucht er in der Uebersicht nicht auf und ist praktisch unsichtbar."""
+    """Otherwise it never shows in the overview and is effectively invisible."""
     b = bot()
     gruppiert = {c for g in b.GRUPPEN.values() for c in g}
     fehlt = set(b.router.handlers) - gruppiert - {"help"}
@@ -41,12 +41,12 @@ def test_uebersicht_passt_in_eine_nachricht():
 
 
 def test_uebersicht_nennt_alle_befehle_solange_es_geht():
-    """Der Node haengt seinen Namen vorn dran — das Budget ist knapp.
+    """The node prefixes its own name — the budget is tight.
 
-    Solange die nackte Liste hineinpasst, steht sie da; ein Themenmenue waere
-    die schlechtere Antwort. Seit dem 24. Befehl passt sie nicht mehr, dann
-    muessen wenigstens alle **Gruppen** genannt sein. Ein Rumpf aus beidem
-    waere der Fehler, den dieser Test verhindert.
+    As long as the bare list fits, it is shown; a topic menu would be the worse
+    answer. Since the 24th command it no longer fits, and then at least all
+    **groups** must be named. A stump of both would be the bug this test
+    prevents.
     """
     from meshbot.main import Bot
 
@@ -61,11 +61,11 @@ def test_uebersicht_nennt_alle_befehle_solange_es_geht():
 def test_nutzlimit_laesst_platz_fuer_den_absendernamen():
     b = bot()
     assert b.settings.nutzlimit == b.settings.max_msg_len - b.settings.sender_reserve
-    assert b.settings.sender_reserve >= 23      # laengster Name im Netz + ": "
+    assert b.settings.sender_reserve >= 23      # longest name on the network + ": "
 
 
 def test_antworten_bleiben_unter_dem_nutzlimit():
-    """Der Router kuerzt auf das Nutzlimit, nicht auf das Firmwarelimit."""
+    """The router truncates to the usable limit, not the firmware limit."""
     from meshbot.router import Router
     import json as _json
 
@@ -78,9 +78,9 @@ def test_antworten_bleiben_unter_dem_nutzlimit():
 
 
 def test_uebersicht_faellt_auf_gruppen_zurueck_wenn_es_eng_wird():
-    """Kein Abschneiden am Limit, sondern eine kuerzere Antwort."""
+    """No truncation at the limit, but a shorter answer instead."""
     b = bot()
-    b.settings.max_msg_len = 84                 # Nutzlimit 60
+    b.settings.max_msg_len = 84                 # usable limit 60
     text = run(b.cmd_help("", "x"))
     assert len(text) <= 60 and "Themen:" in text
 
@@ -92,19 +92,18 @@ def test_gruppenhilfe_listet_die_gruppe():
 
 
 def test_kollision_liefert_gruppe_und_befehl():
-    """`netz` ist Befehl UND Gruppe -- die Antwort nennt beides.
+    """`netz` is a command AND a group -- the answer names both.
 
-    Bis 25.08.2026 gewann hier der Befehl. Das war eine bewusste
-    Entscheidung, hatte aber eine Folge, die niemand wollte: Die Gruppe
-    `netz` war ueber !help ueberhaupt nicht erreichbar, und wer sie suchte,
-    bekam einen Einzeiler ueber !netz. Beides passt in eine Nachricht,
-    also kommt beides.
+    Until 2026-08-25 the command won here. That was a deliberate decision, but
+    it had a consequence nobody wanted: the group `netz` was unreachable via
+    !help altogether, and anyone looking for it got a one-liner about !netz.
+    Both fit into one message, so both are sent.
     """
     b = bot()
     text = run(b.cmd_help("netz", "x"))
     assert text.startswith("Netz: ")
-    # Erklaerung dahinter, aber der Befehlsname nur einmal: Er steht in der
-    # Gruppenliste schon drin.
+    # The explanation follows, but the command name only once: it is already in
+    # the group listing.
     assert b.HILFE["netz"].removeprefix("!netz ") in text
     assert text.count("!netz") == 1, text
     assert len(text) <= b.settings.nutzlimit

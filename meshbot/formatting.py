@@ -1,7 +1,7 @@
-"""Zeichenlimit und Zeichensatz.
+"""Character limit and character set.
 
-Airtime ist das knappste Gut: Jede Antwort wird hart begrenzt, bevor sie den
-Dienst verlaesst. Lieber eine gekuerzte Zeile als zwei Pakete.
+Airtime is the scarcest resource: every answer is capped hard before it leaves
+the service. A truncated line beats two packets.
 """
 
 from __future__ import annotations
@@ -13,17 +13,21 @@ UMLAUTE = {
 
 
 def transliterate(text: str) -> str:
-    """Umlaute ersetzen. MeshCore kann UTF-8, aber nicht jedes Display."""
+    """Replace umlauts. MeshCore speaks UTF-8, but not every display does.
+
+    Off by default since 2026-08-28 -- the displays on the network handle them,
+    and "Noetsch" is not the name of the place.
+    """
     for k, v in UMLAUTE.items():
         text = text.replace(k, v)
     return text
 
 
 def clamp(text: str, limit: int) -> str:
-    """Auf die Zeichengrenze kuerzen, moeglichst an einer Wortgrenze.
+    """Cut to the character limit, at a word boundary where possible.
 
-    Der Rest wird mit einem einzelnen Zeichen markiert, damit der Empfaenger
-    sieht, dass etwas fehlt — das kostet weniger als drei Punkte.
+    The remainder is marked with a single character so the receiver can see
+    something is missing — cheaper than three dots.
     """
     text = " ".join(text.split())
     if len(text) <= limit:

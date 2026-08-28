@@ -1,8 +1,8 @@
-"""!relais — nächstgelegene Amateurfunk-Relais.
+"""!relais — nearest amateur radio repeaters.
 
-Datenbestand aus RelaisBlick (oeradio.at), als JSON im Repo mitgeliefert. Kein
-Netzzugriff nötig: Die Liste ändert sich selten, und ein Bot ohne Internet soll
-diesen Befehl trotzdem beantworten können. Aktualisieren siehe README.
+Data from RelaisBlick (oeradio.at), shipped as JSON in the repo. No network
+access required: the list rarely changes, and a bot without internet should
+still be able to answer this command. See the README for updating it.
 """
 
 from __future__ import annotations

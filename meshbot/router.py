@@ -1,8 +1,8 @@
-"""Befehlserkennung und Weiterleitung.
+"""Command recognition and dispatch.
 
-Grundhaltung: **Im Zweifel nicht senden.** Ein unbekannter Befehl, eine fremde
-Absenderkennung, ein Duplikat oder ein gerissenes Limit führen zu Stille, nicht
-zu einer Fehlermeldung — jede Antwort kostet Sendezeit im geteilten Band.
+Stance: **when in doubt, do not send.** An unknown command, a foreign sender id,
+a duplicate or a tripped limit lead to silence, not to an error message — every
+answer costs airtime in a shared band.
 """
 
 from __future__ import annotations
@@ -54,24 +54,24 @@ ALIASES = {
     "az": "az", "sotaaz": "az", "zone": "az", "gipfelzone": "az", "aktivierungszone": "az",
     "quota": "quota", "kontingent": "quota", "rest": "quota",
     "iss": "iss", "sat": "iss",
-    # "berg" ist zugleich Name einer Hilfegruppe. Kein Konflikt: cmd_help loest
-    # Gruppen vor Aliasen auf, der *Befehl* !berg geht trotzdem. "summit" ist
-    # schon an !sota vergeben und bleibt dort.
+    # "berg" is also the name of a help group. No conflict: cmd_help resolves
+    # groups before aliases, and the *command* !berg still works. "summit" is
+    # already taken by !sota and stays there.
     "gipfel": "gipfel", "berg": "gipfel", "peak": "gipfel",
     "version": "version", "ver": "version", "stand": "version",
 }
 
 
-# Umbenannte Befehle. Sie werden nicht mehr ausgefuehrt, sondern beantwortet
-# mit dem Hinweis auf den neuen Namen -- Schweigen waere hier die schlechtere
-# Antwort: Wer den alten Befehl kennt, haelt den Bot sonst fuer kaputt.
+# Renamed commands. They are no longer executed but answered with a pointer to
+# the new name -- silence would be the worse answer here: someone who knows the
+# old command would otherwise conclude the bot is broken.
 VERALTET = {
     "uwz": "!uwz heisst jetzt !warn. Gleiche Daten (GeoSphere Austria), neuer Name",
 }
 
 
 def getippter_name(text: str) -> str | None:
-    """Der Befehlsname so, wie er dasteht — vor der Aufloesung ueber ALIASES."""
+    """The command name as typed — before resolution through ALIASES."""
     text = text.strip()
     if not text.startswith("!"):
         return None
@@ -80,10 +80,10 @@ def getippter_name(text: str) -> str | None:
 
 
 def dig(data: dict[str, Any], pfad: str) -> Any:
-    """Verschachtelten Wert holen: `payload.text` steigt zwei Ebenen hinab.
+    """Fetch a nested value: `payload.text` descends two levels.
 
-    Die Bruecke verpackt das Ereignis, der Nutztext liegt eine Ebene tiefer.
-    Ein Punktpfad haelt das konfigurierbar, statt das Format anzunehmen.
+    The bridge wraps the event, the payload text sits one level below. A dotted
+    path keeps that configurable instead of assuming the format.
     """
     wert: Any = data
     for teil in pfad.split("."):
@@ -96,8 +96,8 @@ def dig(data: dict[str, Any], pfad: str) -> Any:
 def split_sender_prefix(text: str) -> tuple[str | None, str]:
     """`"AT-Node: !help"` -> `("AT-Node", "!help")`.
 
-    MeshCore stellt bei Kanalnachrichten den Absendernamen voran — der Befehl
-    beginnt dadurch nicht mit `!`. Dieselbe Trennung macht auch die App.
+    On channel messages MeshCore prefixes the sender name, so the command does
+    not start with `!`. The app performs the same split.
     """
     stelle = text.find(": ")
     if 0 < stelle < 50:
@@ -108,7 +108,7 @@ def split_sender_prefix(text: str) -> tuple[str | None, str]:
 
 
 def parse_payload(raw: bytes | str, settings: Settings) -> Eingang | None:
-    """Rohnutzlast der Bruecke in Text, Absender und Kanal zerlegen."""
+    """Split the bridge's raw payload into text, sender and channel."""
     if isinstance(raw, bytes):
         raw = raw.decode("utf-8", errors="replace")
     if settings.payload_format == "text":
@@ -122,7 +122,7 @@ def parse_payload(raw: bytes | str, settings: Settings) -> Eingang | None:
     sender = str(dig(data, settings.json_path_sender) or "").strip()
     channel = dig(data, settings.json_path_channel)
 
-    # Absender steht bei Kanalnachrichten im Text, nicht in einem eigenen Feld.
+    # On channel messages the sender is in the text, not in a field of its own.
     name, text = split_sender_prefix(text)
     if not sender:
         sender = name or "unbekannt"
@@ -131,7 +131,7 @@ def parse_payload(raw: bytes | str, settings: Settings) -> Eingang | None:
 
 
 def parse_command(text: str) -> tuple[str, str] | None:
-    """`!wx villach` → `("wx", "villach")`. Kein Präfix, kein Befehl."""
+    """`!wx villach` → `("wx", "villach")`. No prefix, no command."""
     text = text.strip()
     if not text.startswith("!"):
         return None
@@ -160,7 +160,7 @@ class Router:
         return f"{s // 86400}d{s % 86400 // 3600}h" if s >= 86400 else f"{s // 3600}h{s % 3600 // 60}m"
 
     async def handle(self, raw: bytes | str) -> str | None:
-        """Rückgabe: fertige Antwort oder None, wenn geschwiegen wird."""
+        """Returns the finished answer, or None when staying silent."""
         if not self.enabled:
             return None
 
@@ -168,7 +168,7 @@ class Router:
         if eingang is None or not eingang.text:
             return None
 
-        # Eigene Nachrichten nie als Befehl auffassen — sonst Endlosschleife.
+        # Never take our own messages for a command — that would be a loop.
         if eingang.sender.strip().lower() == self.settings.bot_name.lower():
             return None
 
@@ -181,10 +181,10 @@ class Router:
             return None
         name, argument = befehl if befehl else (getippt, "")
 
-        # Ab hier steht fest, dass ein Befehl fuer uns hereingekommen ist. Ohne
-        # diese Zeile ist im Nachhinein nicht unterscheidbar, ob eine Anfrage
-        # nie ankam oder ob die Antwort auf dem Rueckweg verlorenging -- beides
-        # sieht im Log gleich aus, naemlich nach gar nichts.
+        # From here on it is established that a command came in for us. Without
+        # this line there is no telling afterwards whether a request never
+        # arrived or the answer was lost on the way back -- both look identical
+        # in the log, namely like nothing at all.
         log.info("befehl", sender=eingang.sender, cmd=name,
                  arg=argument[:24], kanal=eingang.channel)
 
@@ -198,9 +198,9 @@ class Router:
             log.info("globales_limit", cmd=name)
             return None
 
-        # Alter Name: Hinweis statt Ausfuehrung. Erst hier, damit Duplikate und
-        # Limits auch fuer ihn gelten -- sonst waere er der billigste Weg, das
-        # Netz zuzufunken.
+        # Old name: a pointer instead of execution. Only here, so duplicates and
+        # limits apply to it as well -- otherwise it would be the cheapest way to
+        # flood the network.
         if getippt in VERALTET:
             self.served += 1
             log.info("veralteter_befehl", cmd=getippt, sender=eingang.sender)
@@ -211,7 +211,7 @@ class Router:
             return None
         try:
             antwort = await handler(argument, eingang.sender)
-        except Exception as exc:                       # nie den Dienst mitreissen
+        except Exception as exc:                       # never take the service down
             log.exception("handler_fehler", cmd=name, error=str(exc))
             return None
         if not antwort:

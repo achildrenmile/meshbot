@@ -1,7 +1,7 @@
-"""Tests. Schwerpunkt: Der Bot darf nie zu viel senden und nie zu lang.
+"""Tests. Focus: the bot must never send too much and never too long.
 
-Die harte Eigenschaft, die alles andere trägt: **keine Antwort überschreitet
-MAX_MSG_LEN** — geprüft über alle Handler hinweg mit langen Eingaben.
+The hard property carrying everything else: **no answer exceeds MAX_MSG_LEN** —
+checked across every handler with long inputs.
 """
 
 from __future__ import annotations
@@ -43,8 +43,8 @@ def settings() -> Settings:
 
 
 def payload(text: str, sender: str = "OE8TEST", channel: str = "3") -> str:
-    """Nutzlast im Format der Bruecke: Ereignis aussen, Nutztext eine Ebene tiefer,
-    Absendername als Praefix im Text — so kommt es tatsaechlich an."""
+    """Payload in the bridge's format: event on the outside, payload text one
+    level deeper, sender name as a prefix in the text — that is how it arrives."""
     return json.dumps({
         "type": "EventType.CHANNEL_MSG_RECV",
         "payload": {"type": "CHAN", "SNR": 11.5, "channel_idx": int(channel),
@@ -58,7 +58,7 @@ def settings_echt() -> Settings:
                     json_path_channel="payload.channel_idx")
 
 
-# --- Formatierung ---------------------------------------------------------
+# --- Formatting -----------------------------------------------------------
 
 def test_clamp_haelt_grenze_ein():
     for laenge in (10, 40, 140):
@@ -78,7 +78,7 @@ def test_prepare_kombiniert_beides():
     assert len(text) <= 40 and "ä" not in text
 
 
-# --- Befehlserkennung -----------------------------------------------------
+# --- Command recognition --------------------------------------------------
 
 @pytest.mark.parametrize("text,erwartet", [
     ("!wx villach", ("wx", "villach")),
@@ -98,14 +98,14 @@ def test_parse_command_ignoriert_alles_andere(text):
 
 
 def test_parse_payload_echte_bruecke(settings):
-    """Genau die Nutzlast, die meshcore-mqtt auf message/channel/<n> legt."""
+    """Exactly the payload meshcore-mqtt puts on message/channel/<n>."""
     roh = ('{"type": "EventType.CHANNEL_MSG_RECV", "payload": {"type": "CHAN", '
            '"SNR": 11.5, "channel_idx": 3, "path_len": 64, "txt_type": 0, '
            '"sender_timestamp": 1786889382, "text": "AT-achildrenmile: !help"}}')
     e = parse_payload(roh, settings)
     assert e is not None
-    assert e.text == "!help"                 # Praefix entfernt
-    assert e.sender == "AT-achildrenmile"    # Absender aus dem Praefix
+    assert e.text == "!help"                 # prefix removed
+    assert e.sender == "AT-achildrenmile"    # sender taken from the prefix
     assert e.channel == "3"
 
 
@@ -118,8 +118,8 @@ def test_dig_holt_verschachtelt():
 @pytest.mark.parametrize("roh,name,rest", [
     ("AT-Node: !help", "AT-Node", "!help"),
     ("OE8YML: !wx villach", "OE8YML", "!wx villach"),
-    ("!ping", None, "!ping"),                       # ohne Praefix
-    ("http://x: !ping", None, "http://x: !ping"),   # kein Name
+    ("!ping", None, "!ping"),                       # without a prefix
+    ("http://x: !ping", None, "http://x: !ping"),   # not a name
 ])
 def test_split_sender_prefix(roh, name, rest):
     assert split_sender_prefix(roh) == (name, rest)
@@ -129,7 +129,7 @@ def test_parse_payload_kaputt(settings):
     assert parse_payload("kein json", settings) is None
 
 
-# --- Bremsen --------------------------------------------------------------
+# --- Brakes ---------------------------------------------------------------
 
 def test_tokenbucket_begrenzt():
     b = TokenBucket(limit=2, window=600)
@@ -146,11 +146,11 @@ def test_senderlimit_trennt_absender():
 def test_dedup_erkennt_wiederholung():
     d = Deduplicator(window=60)
     assert not d.is_duplicate("A", "!wx villach")
-    assert d.is_duplicate("A", "!WX  Villach")     # Gross/Klein und Leerzeichen egal
+    assert d.is_duplicate("A", "!WX  Villach")     # case and whitespace do not matter
     assert not d.is_duplicate("B", "!wx villach")
 
 
-# --- Router --------------------------------------------------------------
+# --- Router ---------------------------------------------------------------
 
 def run(coro):
     return asyncio.get_event_loop_policy().new_event_loop().run_until_complete(coro)
@@ -212,7 +212,7 @@ def test_router_ueberlebt_handler_fehler(settings):
     assert run(r.handle(payload("!ping"))) is None
 
 
-# --- Handler: Ausgabeformat ----------------------------------------------
+# --- Handlers: output format ---------------------------------------------
 
 def test_wx_render():
     text = h_wx.render("villach", {"TL": 4.2, "RF": 78, "FFAM": 3.3, "DD": 270, "P": 1013})
@@ -230,11 +230,11 @@ def test_wx_ortsaufloesung_toleriert_tippfehler():
     assert treffer is not None and treffer[0] == "villach"
 
 
-# --- Kontingent ------------------------------------------------------------
+# --- Quota -----------------------------------------------------------------
 
 def test_kontingent_nachsehen_verbraucht_nichts():
-    """Der Kern des Befehls: Wer nachsieht, wie viel noch geht, darf dadurch
-    nicht weniger uebrig haben."""
+    """The heart of the command: checking how much is left must not leave
+    less."""
     b = TokenBucket(3, 60)
     assert b.verfuegbar() == 3
     assert b.verfuegbar() == 3
@@ -254,7 +254,7 @@ def test_kontingent_nennt_beide_bremsen():
                                9, 12, 600)
     assert "7/12 pro 1h00 frei" in text
     assert "Bot 9/12 pro 10min" in text
-    # Die Antwort geht selbst durchs Gate -- wer '7 frei' liest, hat 6.
+    # The answer goes through the gate itself -- reading '7 frei' leaves 6.
     assert "inkl. dieser Antwort" in text
 
 
@@ -270,7 +270,7 @@ def test_kontingent_ohne_gate_meldung_erfindet_nichts():
 
 
 def test_kontingent_behaelt_den_alten_wert_bei_muell(settings):
-    """Ein veralteter Stand ist mehr wert als gar keiner."""
+    """A stale reading is worth more than none at all."""
     b = Bot(settings)
     b.on_quota(b'{"limit":12,"used":1,"remaining":11}')
     b.on_quota(b"kaputt")
@@ -285,11 +285,11 @@ def test_kontingent_befehl_geht_ueber_den_router(settings):
     assert "10/12" in run(b.cmd_quota("", "x"))
 
 
-# --- SOTA-Aktivierungszone -------------------------------------------------
+# --- SOTA activation zone --------------------------------------------------
 
-# Quadrat mit 0,01 Grad Kantenlaenge, rund 1,1 km x 0,76 km bei 46,9 Grad.
+# A square 0.01 degrees on a side, roughly 1.1 km x 0.76 km at 46.9 degrees.
 QUADRAT = [[(46.900, 13.850), (46.910, 13.850), (46.910, 13.860), (46.900, 13.860)]]
-# Loch in der Mitte: als zweiter Ring, so wie GPX es liefert.
+# Hole in the middle: as a second ring, the way GPX delivers it.
 MIT_LOCH = QUADRAT + [[(46.904, 13.854), (46.906, 13.854), (46.906, 13.856), (46.904, 13.856)]]
 
 
@@ -316,21 +316,21 @@ def test_az_punkt_in_polygon(punkt, erwartet):
 
 
 def test_az_loch_zaehlt_als_draussen():
-    """Even-odd ueber alle Ringe: Wer im Loch steht, kreuzt zwei Raender und
-    ist damit ausserhalb der Zone — genau wie im Gelaende."""
+    """Even-odd across all rings: standing in the hole crosses two boundaries
+    and therefore counts as outside the zone — exactly as on the ground."""
     assert h_az.innerhalb((46.905, 13.855), MIT_LOCH) is False
     assert h_az.innerhalb((46.902, 13.852), MIT_LOCH) is True   # im Ring, nicht im Loch
 
 
 def test_az_abstand_zum_rand_stimmt_in_metern():
-    """0,001 Grad Breite sind rund 111 m. Zehn Prozent Toleranz, damit die
-    ebene Naeherung nicht als Fehler durchgeht."""
+    """0.001 degrees of latitude is roughly 111 m. Ten per cent tolerance, so
+    the planar approximation does not count as an error."""
     m = h_az.abstand_rand_m((46.901, 13.855), QUADRAT)
     assert 100 < m < 122
 
 
 class _AzClient:
-    """SOTLAS, das ein GPX mit einem Ring liefert — oder 404."""
+    """SOTLAS returning a GPX with one ring — or a 404."""
 
     def __init__(self, ringe=QUADRAT, status=200) -> None:
         self.ringe, self.status, self.urls = ringe, status, []
@@ -397,8 +397,8 @@ def test_az_ohne_gipfel_in_der_naehe(settings, monkeypatch):
 
 
 def test_az_ohne_polygon_erfindet_keine_zone(settings, monkeypatch):
-    """Lieber eine Absage als eine selbst gerechnete Zone: Am Grat ist eine
-    Schaetzung aus dem 25-m-Modell genau dort falsch, wo es darauf ankommt."""
+    """A refusal beats a self-computed zone: on a ridge an estimate from the
+    25 m model is wrong exactly where it matters."""
     b = Bot(settings)
     b.summits = [{"ref": "OE/KT-999", "name": "Testberg", "alt": 2000, "pts": 8,
                   "lat": 46.905, "lon": 13.855, "akt": 1}]
@@ -430,15 +430,15 @@ async def _zone():
 
 
 def test_veralteter_befehl_zeigt_den_neuen_namen(settings):
-    """Schweigen waere hier die schlechtere Antwort: Wer !uwz aus dem Kanal
-    kennt, haelt den Bot sonst fuer kaputt."""
+    """Silence would be the worse answer here: someone who knows !uwz from the
+    channel would otherwise conclude the bot is broken."""
     r = router(settings)
     antwort = run(r.handle(payload("!uwz waidegg")))
     assert antwort is not None and "!warn" in antwort and "GeoSphere" in antwort
 
 
 def test_veralteter_befehl_unterliegt_denselben_bremsen(settings):
-    """Sonst waere der alte Name der billigste Weg, das Netz zuzufunken."""
+    """Otherwise the old name would be the cheapest way to flood the network."""
     r = router(settings)
     assert run(r.handle(payload("!uwz"))) is not None
     assert run(r.handle(payload("!uwz"))) is None          # Duplikat
@@ -449,7 +449,7 @@ def test_warn_leer():
 
 
 class _UwzClient:
-    """Warn-API, bei der nur die ersten `ok` Abfragepunkte antworten."""
+    """A warning API where only the first `ok` query points answer."""
 
     def __init__(self, ok: int, warnungen: list | None = None) -> None:
         self.ok, self.warnungen, self.n = ok, warnungen or [], 0
@@ -467,22 +467,22 @@ class _UwzClient:
 
 
 def test_warn_meldet_ausfall_statt_entwarnung():
-    """Faellt die Warn-API komplett aus, darf der Bot nicht "keine Warnungen"
-    funken. Schweigen ist keine Entwarnung -- das waere die gefaehrlichste
-    Falschaussage, die ein Warndienst machen kann."""
+    """With the warning API fully down, the bot must not transmit "no
+    warnings". Silence is not an all-clear -- that would be the most dangerous
+    false statement a warning service can make."""
     with pytest.raises(h_warn.QuelleNichtErreichbar):
         run(h_warn.fetch(_UwzClient(ok=0), "http://warn.test"))
 
 
 def test_warn_ein_erreichter_punkt_genuegt():
-    """Ein Ausfall einzelner Punkte macht die Antwort unvollstaendig, nicht
-    falsch — dafuer wird nicht der ganze Befehl abgewuergt."""
+    """Individual points failing makes the answer incomplete, not wrong — that
+    is no reason to choke the whole command."""
     assert run(h_warn.fetch(_UwzClient(ok=1), "http://warn.test")) == []
 
 
 def test_warn_faellt_auf_den_letzten_wert_zurueck(settings, monkeypatch):
-    """Bei Ausfall kommt der letzte bekannte Stand mit ~, sonst eine ehrliche
-    Absage — beides ist besser als eine erfundene Entwarnung."""
+    """On failure the last known reading comes back with ~, otherwise an honest
+    refusal — both beat an invented all-clear."""
     b = Bot(settings)
     async def kaputt(*a, **k):
         raise h_warn.QuelleNichtErreichbar("Testausfall")
@@ -494,7 +494,7 @@ def test_warn_faellt_auf_den_letzten_wert_zurueck(settings, monkeypatch):
 
 
 class _UwzPunktClient:
-    """Warn-API fuer eine Position: liefert Gemeindename und Warnungen."""
+    """Warning API for a position: returns municipality name and warnings."""
 
     def __init__(self, ort: str = "Noetsch im Gailtal", warnungen: list | None = None,
                  kaputt: bool = False) -> None:
@@ -517,15 +517,15 @@ class _UwzPunktClient:
 
 
 def test_warn_punkt_nennt_die_gemeinde():
-    """Mit Position steht die Gemeinde im Kopf statt "KTN" — das ist der ganze
-    Grund fuer die Positionsangabe."""
+    """With a position the municipality is in the header instead of "KTN" —
+    which is the entire point of giving a position."""
     warnungen = [{"properties": {"warnstufeid": 1, "warntypid": 5,
                                  "end": "20.08.2026 22:00"}}]
     client = _UwzPunktClient(warnungen=warnungen)
     ort, treffer = run(h_warn.fetch_punkt(client, "http://warn.test", 46.5886, 13.6208))
     assert ort == "Noetsch im Gailtal"
     assert client.params[0]["lat"] == 46.5886 and client.params[0]["lon"] == 13.6208
-    # Gebiet steht vorne, in der Klammer bleibt nur die Uhrzeit.
+    # The area is in front, the parentheses carry only the time.
     assert h_warn.render(treffer, ort=ort) == "WARN Noetsch im Gailtal: GELB Gewitter (bis 22:00)"
 
 
@@ -536,9 +536,8 @@ def test_warn_punkt_ohne_warnung_entwarnt_nur_fuer_diese_gemeinde():
 
 
 def test_warn_punkt_reicht_den_fehler_durch():
-    """Ein einzelner Punkt kennt keine Teilabdeckung: keine Antwort, keine
-    Aussage. Stillschweigend eine leere Liste zurueckzugeben waere eine
-    erfundene Entwarnung."""
+    """A single point has no partial coverage: no answer, no statement.
+    Silently returning an empty list would be an invented all-clear."""
     with pytest.raises(Exception):
         run(h_warn.fetch_punkt(_UwzPunktClient(kaputt=True), "http://warn.test", 46.6, 13.6))
 
@@ -557,8 +556,8 @@ def test_warn_punkt_faellt_auf_den_letzten_wert_zurueck(settings, monkeypatch):
 
 
 def test_warn_ohne_position_bleibt_die_landesuebersicht(settings, monkeypatch):
-    """Die Positionsabfrage darf den alten Weg nicht verdraengen — ohne
-    Koordinaten weiter die vier Punkte."""
+    """The position query must not displace the old path — without coordinates,
+    the four points as before."""
     b = Bot(settings)
     gerufen = []
 
@@ -572,9 +571,9 @@ def test_warn_ohne_position_bleibt_die_landesuebersicht(settings, monkeypatch):
 
 
 def test_warn_ortsname_fragt_die_ortskoordinate_ab(settings, monkeypatch):
-    """Noetsch misst in Bad Bleiberg — das ist eine andere Gemeinde. Gefragt
-    werden muss die Koordinate des Ortes, sonst kommt die Warnung des
-    Nachbartals zurueck."""
+    """Nötsch measures in Bad Bleiberg — a different municipality. The place's
+    own coordinate has to be queried, otherwise the warning of the neighbouring
+    valley comes back."""
     b = Bot(settings)
     rufe = []
 
@@ -589,9 +588,9 @@ def test_warn_ortsname_fragt_die_ortskoordinate_ab(settings, monkeypatch):
 
 
 def test_warn_ortsname_nennt_die_gemeinde_dazu(settings, monkeypatch):
-    """Waidegg liegt in der Gemeinde Kirchbach. Wer "waidegg" tippt, muss
-    beides sehen — sonst wirkt die Antwort wie eine Warnung fuer einen
-    fremden Ort."""
+    """Waidegg lies in the municipality of Kirchbach. Typing "waidegg" has to
+    show both — otherwise the answer reads like a warning for some other
+    place."""
     b = Bot(settings)
 
     async def fake_punkt(client, url, lat, lon):
@@ -607,8 +606,8 @@ def test_warn_ortsname_nennt_die_gemeinde_dazu(settings, monkeypatch):
     ("klagenfurt", "Klagenfurt am Wörthersee", "Klagenfurt am Wörthersee"),
 ])
 def test_warn_ortsname_ohne_doppelung(settings, monkeypatch, gefragt, gemeinde, kopf):
-    """Steckt der gefragte Name schon vorne in der Gemeinde, ist die Klammer
-    nur Ballast — und Ballast kostet hier Sendezeit."""
+    """If the name asked for already starts the municipality, the parentheses
+    are ballast — and ballast costs airtime here."""
     b = Bot(settings)
 
     async def fake_punkt(client, url, lat, lon):
@@ -626,8 +625,8 @@ def test_warn_unbekannter_ort_zeigt_den_weg(settings):
 
 
 def test_warn_punkt_cache_rundet_auf_die_gemeinde(settings, monkeypatch):
-    """Zwei Handpositionen 200 m auseinander liegen in derselben Gemeinde und
-    duerfen nicht zwei Abfragen ausloesen."""
+    """Two handheld positions 200 m apart lie in the same municipality and must
+    not trigger two queries."""
     b = Bot(settings)
     rufe = []
 
@@ -650,7 +649,7 @@ def test_warn_sortiert_nach_stufe_und_kuerzt():
     ]
     text = h_warn.render(warnungen)
     assert text.index("ORANGE") < text.index("GELB")
-    assert "+2 weitere" in text          # nur zwei passen in eine Nachricht
+    assert "+2 weitere" in text          # only two fit into one message
     assert len(text) <= 140
 
 
@@ -704,7 +703,7 @@ def test_sota_ohne_gipfel_in_reichweite():
 
 
 def test_echte_gipfeldaten_ladbar():
-    """Der lokale Bestand traegt !sota auch ohne Internet."""
+    """The local dataset carries !sota even without internet."""
     s = Settings(mqtt_host="test")
     gipfel = h_sota.load_summits(s.summits_file)
     assert len(gipfel) > 1000
@@ -728,7 +727,7 @@ def test_relais_suche_nach_distanz():
 
 
 def test_echte_relaisdaten_ladbar():
-    """Die mitgelieferte Datei muss brauchbar sein, sonst faellt der Befehl aus."""
+    """The shipped file has to be usable, otherwise the command fails."""
     s = Settings(mqtt_host="test")
     daten = h_relais.load_relais(s.relais_file)
     assert len(daten) > 50
@@ -748,27 +747,27 @@ def test_echte_stationsdaten_ladbar():
 
 @pytest.mark.parametrize("arg,erwartet_teil", [
     ("villach", "villach"),
-    ("46.6031 13.6712", "Villacher Alpe"),      # Position auf dem Berg -> Bergstation
+    ("46.6031 13.6712", "Villacher Alpe"),      # position on the mountain -> summit station
     ("geo:46.79,13.50", "Spittal"),
     ("46,6247, 14,3053", "Klagenfurt"),
 ])
 def test_ort_oder_position(arg, erwartet_teil):
-    """Ortsname und Koordinaten fuehren beide zu einer Station."""
+    """A place name and coordinates both lead to a station."""
     s = Settings(mqtt_host="test")
     treffer = h_wx.resolve_place(arg, h_wx.load_stations(s), "villach")
     assert treffer is not None and erwartet_teil.lower() in treffer[0].lower()
 
 
 def test_position_nennt_die_station():
-    """Bei Koordinaten muss der Stationsname in der Antwort stehen — sonst weiss
-    niemand, woher die Werte kommen."""
+    """With coordinates the station name has to be in the answer — otherwise
+    nobody knows where the values came from."""
     s = Settings(mqtt_host="test")
     ort, station = h_wx.resolve_place("46.94 14.56", h_wx.load_stations(s), "villach")
     text = h_wx.render(ort, {"TL": 20.0})
     assert station["station"].split()[0][:5].lower() in text.lower()
 
 
-# --- Ortsverzeichnis ------------------------------------------------------
+# --- Place directory ------------------------------------------------------
 
 @pytest.mark.parametrize("arg", [
     "Treibach",              # Ortsteil von Althofen, meldete am 17.08. "unbekannt"
@@ -785,12 +784,12 @@ def test_kaerntner_orte_werden_gefunden(arg):
 
 
 def test_ortsnamen_bekommen_talstationen():
-    """Arnoldstein liegt auf 580 m, die Villacher Alpe auf 2117 m und ist
-    trotzdem die naechste Station. Ortsnamen duerfen dort nicht landen —
-    sonst antwortet der Bot mit zehn Grad zu wenig.
+    """Arnoldstein sits at 580 m, the Villacher Alpe at 2117 m and is still the
+    nearest station. Place names must not land there — the bot would otherwise
+    answer ten degrees too cold.
 
-    Ausnahme sind Orte, deren eigene Station am Berg steht (Mallnitz,
-    Flattnitz, Kanzelhoehe). Die erkennt man am Namen.
+    The exception are places whose own station stands up the mountain
+    (Mallnitz, Flattnitz, Kanzelhöhe). Those are recognisable by name.
     """
     s = Settings(mqtt_host="test")
     daten = h_wx.load_stations(s)
@@ -802,8 +801,8 @@ def test_ortsnamen_bekommen_talstationen():
 
 
 def test_keine_station_liegt_absurd_weit_weg():
-    """Kaernten ist 180 km breit und hat 34 Stationen. Mehr als 30 km Abstand
-    heisst, dass die Zuordnung danebengegriffen hat."""
+    """Carinthia is 180 km wide and has 34 stations. More than 30 km of
+    distance means the mapping went wrong."""
     s = Settings(mqtt_host="test")
     daten = h_wx.load_stations(s)
     stationen = {st["id"]: st for st in daten["stationen"]}
@@ -817,42 +816,43 @@ def test_keine_station_liegt_absurd_weit_weg():
 
 @pytest.mark.parametrize("arg", ["Innsbruck", "Ljubljana", "xyzquark"])
 def test_fremde_orte_bleiben_unbekannt(arg):
-    """Das Verzeichnis endet an der Landesgrenze. Ein Treffer waere hier
-    schlimmer als keiner: er lieferte Kaerntner Werte fuer Tirol."""
+    """The Carinthian directory ends at the state border. A hit here would be
+    worse than none: it would serve Carinthian values for Tyrol. Places outside
+    are answered by the place lookup instead, with a model value."""
     s = Settings(mqtt_host="test")
     assert h_wx.resolve_place(arg, h_wx.load_stations(s), "villach") is None
 
 
 def test_unbekannter_ort_wird_aufgezogen_aber_hilfreich():
-    """Spott ohne Hinweis waere nur unhoeflich. Jede Variante nennt einen Weg,
-    wie es richtig geht — der Ort steht ebenfalls drin, sonst raet der
-    Empfaenger, worauf sich die Antwort bezieht."""
+    """Mockery without a pointer would just be rude. Every variant names a way
+    to do it right — the place is in there too, otherwise the receiver has to
+    guess what the answer refers to."""
     for variante in h_wx.SPOTT:
         text = variante.format(ort="Irgendwo")
         assert "!wx" in text or "Position" in text or "Kaernten" in text
-        assert "Irgendwo" in text          # sonst raet der Empfaenger, worum es ging
+        assert "Irgendwo" in text          # otherwise the receiver has to guess what it was about
     text = h_wx.render_unbekannt("Villagh")
     assert text.startswith("WX: ") and "Villagh" in text
 
 
 def test_unbekannter_ort_ignoriert_gross_kleinschreibung():
-    """Derselbe Tippfehler bekommt immer dieselbe Antwort, egal wie getippt."""
+    """The same typo always gets the same answer, however it was typed."""
     assert h_wx.render_unbekannt("VILLAGH") == h_wx.render_unbekannt("villagh")
     assert h_wx.render_unbekannt("HINTERTUPFING") == h_wx.render_unbekannt("hintertupfing")
 
 
 def test_erfundene_orte_bekommen_eine_eigene_antwort():
-    """Wer "Hintertupfing" tippt, hat sich keinen Tippfehler geleistet, sondern
-    einen Scherz gemacht. Das darf zurueckkommen."""
+    """Typing "Hintertupfing" is not a typo but a joke. That may be returned in
+    kind."""
     text = h_wx.render_unbekannt("Hintertupfing")
     assert "Erfunden" in text
-    assert text != h_wx.render_unbekannt("Hintertupfingx")     # nur der Scherz selbst
+    assert text != h_wx.render_unbekannt("Hintertupfingx")     # only the joke itself
     assert h_wx.render_unbekannt("BIELEFELD") == h_wx.render_unbekannt("bielefeld")
 
 
 def test_unbekannter_ort_sprengt_das_zeichenlimit_nicht(settings):
-    """Emojis sind in UTF-8 bis zu sieben Byte lang, die Firmware zaehlt Bytes.
-    Ein langer Ortsname darf die Antwort nicht ueber die harte Grenze heben."""
+    """Emoji run to seven bytes in UTF-8, and the firmware counts bytes. A long
+    place name must not push the answer past the hard limit."""
     lang = "Kleinkleckersdorf am Berge und noch viel weiter hinten"
     for arg in ("x", lang, "Ljubljana", "München", "", *h_wx.SPEZIAL):
         text = prepare(h_wx.render_unbekannt(arg), settings.nutzlimit, settings.transliterate)
@@ -863,20 +863,20 @@ def test_unbekannter_ort_sprengt_das_zeichenlimit_nicht(settings):
 def test_station_wird_genannt_wenn_sie_woanders_steht():
     assert h_wx.render("knappenberg", {"TL": 20.0}, station="Friesach").startswith(
         "WX Knappenberg (Friesach):")
-    # Am Stationsort selbst waere die Klammer nur Ballast.
+    # At the station location itself the parentheses would be pure ballast.
     assert h_wx.render("villach", {"TL": 20.0}, station="Villach").startswith("WX Villach:")
 
 
 def test_keine_antwort_sprengt_das_zeichenlimit():
-    """Ortsname plus Stationsname plus Messwerte — der laengste Fall im
-    Verzeichnis muss ungekuerzt durchpassen."""
+    """Place name plus station name plus measurements — the longest case in the
+    directory has to fit through untruncated."""
     s = Settings(mqtt_host="test")
     werte = {"TL": -12.3, "RF": 100, "FFAM": 33.3, "DD": 225, "P": 1013}
     for ort, v in h_wx.load_stations(s)["orte"].items():
         assert len(h_wx.render(ort, werte, station=v.get("station"))) <= s.nutzlimit
 
 
-# --- Eigenschaft ueber alles ---------------------------------------------
+# --- Property across everything -------------------------------------------
 
 @pytest.mark.parametrize("roh", [
     "WX " + "Sehr langer Ortsname " * 20,
@@ -888,12 +888,12 @@ def test_keine_antwort_ueberschreitet_das_limit(roh):
     assert len(prepare(roh, 140, True)) <= 140
 
 
-# --- Sonne: gegen unabhaengig gerechnete Werte -----------------------------
+# --- Sun: against independently computed values ----------------------------
 
 def test_sonne_villach_gegen_referenz():
-    """Referenz sunrise-sunset.org fuer Villach am 16.08.2026 (UTC):
-    Aufgang 04:02, Untergang 18:15, Daemmerungsende 18:46.
-    Die vereinfachte Sonnenstandsgleichung darf zwei Minuten danebenliegen."""
+    """Reference sunrise-sunset.org for Villach on 2026-08-16 (UTC):
+    rise 04:02, set 18:15, end of twilight 18:46. The simplified solar position
+    equation is allowed to be two minutes off."""
     from datetime import datetime, timezone
     jetzt = datetime(2026, 8, 16, 12, 0, tzinfo=timezone.utc)
     w = h_sonne.berechne(46.6103, 13.8558, jetzt)
@@ -942,7 +942,7 @@ def test_spot_leer():
     assert "niemand" in h_spot.render([], datetime.now(timezone.utc))
 
 
-# --- Lawine --------------------------------------------------------------
+# --- Avalanche ------------------------------------------------------------
 
 def test_lawine_ausserhalb_der_saison():
     assert "kein Bulletin" in h_lawine.render(None)
@@ -961,7 +961,7 @@ def test_lawine_url_pattern():
     assert h_lawine.url_fuer(date(2026, 2, 1)).endswith("2026-02-01/2026-02-01-AT-02.json")
 
 
-# --- Netz ----------------------------------------------------------------
+# --- Network --------------------------------------------------------------
 
 def test_netz_erkennt_kaerntner_knoten():
     assert h_netz.ist_kaernten("AT-VL-Noetsch", 46.58, 13.62)
@@ -979,17 +979,17 @@ def test_netz_render():
 
 
 def test_netz_nennt_den_tageswert_nur_wenn_er_etwas_sagt():
-    """Solange alle Repeater innerhalb eines Tages liefern, ist die Angabe
-    Fuellsel. Faellt einer einen ganzen Tag aus, muss sie dastehen."""
+    """While every repeater reports within a day, the figure is filler. If one
+    is out for a whole day, it has to be there."""
     basis = {"aktiv_1h": 31, "gesamt": 33, "weiter_1h": 2533, "weiter_24h": 31865, "top": None}
-    # "/24h" steht auch im Paketzaehler -- gemeint ist die Klammer dahinter.
+    # "/24h" also appears in the packet counter -- what is meant is the bracket.
     assert "(24h" not in h_netz.render({**basis, "aktiv_24h": 33})
     assert "(24h 30)" in h_netz.render({**basis, "aktiv_24h": 30})
 
 
 def test_netz_zaehlt_die_stunde_nicht_den_tag():
-    """Der Tageswert meldet jeden als aktiv, der irgendwann gefunkt hat --
-    ein Ausfall waere erst nach 24 Stunden sichtbar."""
+    """The daily figure reports anything that transmitted at some point as
+    active -- an outage would only become visible after 24 hours."""
     nodes = [{"name": "AT-VI-A", "role": "repeater", "lat": 46.6, "lon": 13.8,
               "relay_count_1h": 0, "relay_count_24h": 500},
              {"name": "AT-VI-B", "role": "repeater", "lat": 46.6, "lon": 13.8,
@@ -1004,10 +1004,10 @@ def test_netz_zaehlt_die_stunde_nicht_den_tag():
     w = run(h_netz.fetch(FakeClient(), "http://karte.test"))
     assert (w["aktiv_1h"], w["aktiv_24h"], w["gesamt"]) == (1, 2, 2)
     assert (w["weiter_1h"], w["weiter_24h"]) == (40, 1400)
-    assert w["top"] == ("AT-VI-B", 40)          # staerkster nach der Stunde
+    assert w["top"] == ("AT-VI-B", 40)          # busiest by the hour
 
 
-# --- Vorhersage ----------------------------------------------------------
+# --- Forecast -------------------------------------------------------------
 
 def test_vorhersage_render():
     text = h_fc.render("villach", {"tmin": 18.2, "tmax": 26.4, "regen": 11.0, "boe": 10.5, "stunden": 24})
@@ -1019,7 +1019,7 @@ def test_vorhersage_kein_regen():
     assert "kein Regen" in text
 
 
-# --- Hilfe: darf nie hinter den Befehlen zurueckbleiben -------------------
+# --- Help: must never lag behind the commands -----------------------------
 
 def _bot():
     from meshbot.main import Bot
@@ -1027,19 +1027,19 @@ def _bot():
 
 
 def test_jeder_befehl_hat_eine_einzelhilfe():
-    """Neuer Befehl ohne Hilfetext ist ein Fehler, kein Schoenheitsfehler."""
+    """A new command without a help text is a bug, not a blemish."""
     bot = _bot()
     fehlend = [c for c in bot.router.handlers if c not in bot.HILFE]
     assert not fehlend, f"ohne Hilfe: {fehlend}"
 
 
 def test_jeder_befehl_ist_von_der_uebersicht_aus_erreichbar():
-    """Erreichbar, nicht zwingend genannt.
+    """Reachable, not necessarily named.
 
-    Bei 24 Befehlen passt die flache Liste nicht mehr in 100 Zeichen -- die
-    Uebersicht nennt dann die Gruppen. Die Zusage bleibt trotzdem: Von `!help`
-    aus fuehrt zu **jedem** Befehl ein Weg. Ein Befehl, der in keiner Gruppe
-    steht, ist unauffindbar, auch wenn er funktioniert.
+    At 24 commands the flat list no longer fits into 100 characters -- the
+    overview then names the groups. The promise holds all the same: from
+    `!help` there is a path to **every** command. A command in no group is
+    undiscoverable, even when it works.
     """
     from meshbot.main import Bot
     from meshbot.router import ALIASES
@@ -1049,8 +1049,8 @@ def test_jeder_befehl_ist_von_der_uebersicht_aus_erreichbar():
         if cmd == "help":
             continue
         namen = [a for a, ziel in ALIASES.items() if ziel == cmd]
-        # Ohne "!" geprueft: In der knappsten Form, die noch alle Namen nennt,
-        # spart die Uebersicht das Praefix ein.
+        # Checked without "!": in the tightest form that still names every
+        # command, the overview drops the prefix.
         direkt = any(n in text for n in namen)
         ueber_gruppe = any(g in text and cmd in liste
                            for g, liste in Bot.GRUPPEN.items())
@@ -1064,7 +1064,7 @@ def test_hilfe_passt_in_eine_nachricht():
         assert len(run(bot.cmd_help(cmd, "x"))) <= 140, f"Hilfe zu {cmd} zu lang"
 
 
-# --- QTH: Locator hin und zurueck ----------------------------------------
+# --- QTH: locator there and back ------------------------------------------
 
 @pytest.mark.parametrize("lat,lon,loc", [
     (46.6031, 13.6712, "JN66"),       # Dobratsch
@@ -1076,7 +1076,7 @@ def test_qth_koordinaten_zu_locator(lat, lon, loc):
 
 
 def test_qth_hin_und_zurueck_bleibt_nah():
-    """Ein Locatorfeld ist rund 5 x 4 km gross — mehr Genauigkeit gibt es nicht."""
+    """A locator field is roughly 5 x 4 km — there is no more precision than that."""
     for lat, lon in [(46.6031, 13.6712), (47.0744, 12.6942), (46.9375, 14.5416)]:
         zurueck = h_qth.from_locator(h_qth.to_locator(lat, lon))
         assert zurueck is not None
@@ -1088,7 +1088,7 @@ def test_qth_ungueltige_locator(loc):
     assert h_qth.from_locator(loc) is None
 
 
-# --- Wo: Knotensuche ------------------------------------------------------
+# --- Wo: node lookup ------------------------------------------------------
 
 def _nodes():
     return [
@@ -1121,7 +1121,7 @@ def test_wo_render():
     assert "AT-VI-Dobratsch" in text and "1803/24h" in text and len(text) <= 140
 
 
-# --- Melde: Meldungen aus dem Funknetz ------------------------------------
+# --- Melde: reports from the radio network --------------------------------
 
 def test_melde_zieht_position_heraus():
     from datetime import datetime, timezone
@@ -1138,7 +1138,7 @@ def test_melde_ohne_position():
 
 
 def test_melde_haengt_an_und_zaehlt(tmp_path):
-    """Meldungen duerfen nie verloren gehen — angehaengt, nie ueberschrieben."""
+    """Reports must never be lost — appended, never overwritten."""
     from datetime import datetime, timezone
     pfad = tmp_path / "unterordner" / "meldungen.jsonl"
     jetzt = datetime(2026, 8, 16, tzinfo=timezone.utc)

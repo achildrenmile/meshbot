@@ -1,7 +1,7 @@
-"""Konfiguration. Alles ueber Umgebungsvariablen, nichts einkompiliert.
+"""Configuration. Everything via environment variables, nothing compiled in.
 
-Die MQTT-Topics und das Nachrichtenformat sind bewusst konfigurierbar: Die Bruecke
-ins Mesh gibt das Format vor, nicht dieser Dienst.
+MQTT topics and the message format are configurable on purpose: the bridge into
+the mesh dictates the format, not this service.
 """
 
 from __future__ import annotations
@@ -25,15 +25,15 @@ class Settings(BaseSettings):
     mqtt_tls: bool = False
     mqtt_client_id: str = "meshbot"
 
-    # --- Topics. Vorgabe passt zum meshinfra-Stack. ---
+    # --- Topics. Defaults match the meshinfra stack. ---
     topic_rx: str = "meshinfra/message/channel/3"
     topic_tx: str = "meshinfra/tx/chan"
     topic_admin: str = "meshinfra/bot/admin"
-    # Das Gate veroeffentlicht seinen Kontingentstand retained -- beim
-    # Abonnieren liegt der letzte Wert also sofort an, ohne Nachfrage.
+    # The gate publishes its quota state retained, so subscribing delivers the
+    # last value immediately, without asking.
     topic_quota: str = "meshinfra/gate/quota"
 
-    # --- Nutzlastformat ---
+    # --- Payload format ---
     payload_format: str = "json"          # json | text
     json_path_text: str = "text"
     json_path_sender: str = "sender"
@@ -41,44 +41,45 @@ class Settings(BaseSettings):
     tx_template: str = '{{"channel": {channel}, "message": "{text}"}}'
     tx_channel: int = 3
 
-    # --- Betrieb ---
+    # --- Operation ---
     bot_enabled: bool = True
     bot_name: str = "MeshBot"
-    channel_filter: str = ""              # leer = kein Filter
+    channel_filter: str = ""              # empty = no filter
     max_msg_len: int = 140
     hard_msg_len: int = 150
-    # Der Node stellt der Nachricht seinen eigenen Namen voran ("AT-VI-KFHQ: ").
-    # Diese Zeichen zaehlen zum Firmwarelimit, der Bot sieht sie aber nie. Ohne
-    # Reserve lehnt der Node die fertige Nachricht ab (error_code 2) und die
-    # Antwort verschwindet spurlos. Absendernamen im Netz gehen bis 21 Zeichen.
+    # The node prefixes the message with its own name ("AT-VI-KFHQ: "). Those
+    # characters count towards the firmware limit, but the bot never sees them.
+    # Without a reserve the node rejects the finished message (error_code 2) and
+    # the answer vanishes without a trace. Sender names on the network run to 21
+    # characters.
     sender_reserve: int = 24
-    # Umlaute duerfen gefunkt werden. Die Displays im Netz koennen sie, und
-    # "Nötsch" ist der Name des Ortes -- "Noetsch" ist eine Notloesung aus der
-    # Zeit, als das nicht feststand.
+    # Umlauts may go on the air. The displays on the network handle them, and
+    # "Nötsch" is the name of the place -- "Noetsch" was a stopgap from the time
+    # when that was not settled.
     #
-    # Was das kostet: In UTF-8 ist ein Umlaut zwei Byte, ein ASCII-Zeichen
-    # eines. Das Nutzlimit zaehlt Zeichen, die Luft zaehlt Byte -- eine Antwort
-    # mit drei Umlauten ist drei Byte laenger, als die Zeichenzahl vermuten
-    # laesst. Bei der gemessenen Grenze (bis 59 Zeichen kommen 92 % an, ab 60
-    # nur 47 %) ist das der Rede wert, aber kein Grund, Ortsnamen zu verbiegen.
+    # What it costs: in UTF-8 an umlaut is two bytes, an ASCII character one.
+    # The usable limit counts characters, the air counts bytes -- an answer with
+    # three umlauts is three bytes longer than the character count suggests. At
+    # the measured threshold (up to 59 characters 92 % arrive, from 60 only
+    # 47 %) that is worth knowing, but no reason to mangle place names.
     #
-    # SOTA-Verbandskuerzel bleiben davon unberuehrt: "OE" ist ein Code, kein
-    # verunglimpftes "Ö", und wird nirgends zurueckuebersetzt.
+    # SOTA association codes are untouched by this: "OE" is a code, not a
+    # mistreated "Ö", and is never translated back.
     transliterate: bool = False
     default_location: str = "villach"
     sota_default_assoc: str = "OE/KT"
 
-    # --- Airtime-Bremsen ---
-    # Der Betrieb zeigt, dass 6 Antworten je 10 Minuten zu knapp sind: wer drei
-    # Orte hintereinander abfragt, laeuft ins Schweigen. Verdoppelt, nicht mehr
-    # — das Stundenlimit des meshinfra-Gates bleibt die harte Grenze darueber.
-    global_limit: int = 12                # Antworten
-    global_window_s: int = 600            # je 10 Minuten
-    sender_limit: int = 4                 # Befehle
-    sender_window_s: int = 300            # je 5 Minuten
+    # --- Airtime brakes ---
+    # Operation showed that 6 answers per 10 minutes is too tight: querying
+    # three places in a row runs into silence. Doubled, no more than that — the
+    # meshinfra gate's hourly limit stays the hard ceiling above it.
+    global_limit: int = 12                # answers
+    global_window_s: int = 600            # per 10 minutes
+    sender_limit: int = 4                 # commands
+    sender_window_s: int = 300            # per 5 minutes
     dedup_window_s: int = 60
 
-    # --- Aussenwelt ---
+    # --- Outside world ---
     http_timeout_s: float = 5.0
     http_retries: int = 1
     cache_ttl_wx_s: int = 600
@@ -90,10 +91,10 @@ class Settings(BaseSettings):
     cache_ttl_forecast_s: int = 1800
     cache_ttl_netz_s: int = 600
     cache_ttl_dx_s: int = 900
-    cache_ttl_tle_s: int = 21600           # TLE altern langsam, 6h reicht
-    cache_ttl_gelaende_s: int = 604800     # Berge bewegen sich nicht
-    cache_ttl_geo_s: int = 604800          # Orte auch nicht
-    cache_ttl_az_s: int = 2592000          # SOTLAS-Zonenpolygone, 30 Tage
+    cache_ttl_tle_s: int = 21600           # TLEs age slowly, 6h is enough
+    cache_ttl_gelaende_s: int = 604800     # mountains do not move
+    cache_ttl_geo_s: int = 604800          # neither do places
+    cache_ttl_az_s: int = 2592000          # SOTLAS zone polygons, 30 days
 
     geosphere_tawes_url: str = (
         "https://dataset.api.hub.geosphere.at/v1/station/current/tawes-v1-10min"
@@ -105,18 +106,18 @@ class Settings(BaseSettings):
     forecast_url: str = "https://dataset.api.hub.geosphere.at/v1/timeseries/forecast/nwp-v1-1h-2500m"
     map_url: str = "https://map.carinthiamesh.com"
     topo_url: str = "https://api.opentopodata.org/v1/eudem25m"
-    # Gipfelwetter: Modellwerte fuer Berge, wo keine Station steht und wo die
-    # GeoSphere ohnehin endet -- also ausserhalb Oesterreichs.
+    # Summit weather: model values for mountains where no station stands and
+    # where GeoSphere ends anyway -- that is, outside Austria.
     berg_url: str = "https://api.open-meteo.com/v1/forecast"
-    # Ortssuche fuer alles ausserhalb der 34 Kaerntner Stationen. Dieselbe
-    # Quelle wie das Gipfelwetter, damit es bei einem Ausfall nur eine gibt.
+    # Place lookup for everything outside the 34 Carinthian stations. Same
+    # source as the summit weather, so an outage takes out one and not two.
     geocode_url: str = "https://geocoding-api.open-meteo.com/v1/search"
     hamqsl_url: str = "https://www.hamqsl.com/solarxml.php"
     tle_url: str = "https://celestrak.org/NORAD/elements/gp.php?CATNR=25544&FORMAT=TLE"
 
-    # Profilaufloesung fuer !sicht. 85 Punkte passen in eine Abfrage der
-    # freien Hoehen-API (Grenze 100) und ergeben bei 20 km rund 235 m
-    # Schrittweite -- fein genug, um einen Grat nicht zu uebersehen.
+    # Profile resolution for !sicht. 85 points fit into one request of the free
+    # elevation API (limit 100) and give roughly 235 m of step size over 20 km
+    # -- fine enough not to miss a ridge.
     sicht_punkte: int = 85
     sicht_mast_m: float = 3.0
     tz_offset_h: int = 2
@@ -133,7 +134,7 @@ class Settings(BaseSettings):
 
     @property
     def nutzlimit(self) -> int:
-        """Zeichen, die dem Bot fuer den eigenen Text bleiben."""
+        """Characters left to the bot for its own text."""
         return self.max_msg_len - self.sender_reserve
 
 

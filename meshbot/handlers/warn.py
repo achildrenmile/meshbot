@@ -1,24 +1,23 @@
-"""!warn — amtliche Wetterwarnungen.
+"""!warn — official weather warnings.
 
-Quelle: GeoSphere Austria Warn-API (`warnungen.zamg.at/wsapp/api`), Endpunkt
+Source: GeoSphere Austria warning API (`warnungen.zamg.at/wsapp/api`), endpoint
 `getWarningsForCoords`, CC BY 4.0.
 
-Der Befehl hiess bis August 2026 `!uwz` und die Antworten begannen mit
-`UWZ`. Das war falsch beschriftet: Die Unwetterzentrale (uwz.at) ist ein
-privater Dienst der UBIMET und hat mit diesen Daten nichts zu tun --
-amtlich warnt in Oesterreich die GeoSphere. Ein fremder Markenname ueber
-fremden Daten ist keine Kleinigkeit, deshalb heisst beides jetzt `WARN`.
-`!uwz` bleibt als Eingabe erhalten, damit niemand ins Leere tippt.
+The command was called `!uwz` until August 2026 and the answers started with
+`UWZ`. That was mislabelled: the Unwetterzentrale (uwz.at) is a private service
+run by UBIMET and has nothing to do with this data -- in Austria the official
+warnings come from GeoSphere. Somebody else's brand name over somebody else's
+data is not a triviality, so both are now called `WARN`. `!uwz` survives as
+input so that nobody types into the void.
 
-Abgefragt werden mehrere Punkte in Kärnten, weil die API gemeindeweise
-antwortet — ein einzelner Punkt würde eine Warnung im Nachbartal übersehen.
+Several points across Carinthia are queried, because the API answers per
+municipality — a single point would miss a warning in the next valley.
 
-Wer einen Ort oder eine Position mitschickt, bekommt stattdessen genau seine
-Gemeinde:
+Sending a place or a position along returns exactly that municipality instead:
 
-    !warn                 -> Übersicht über vier Landesteile
-    !warn 46.60 13.67     -> nur die Gemeinde an dieser Position
-    !warn waidegg         -> dasselbe über das Ortsverzeichnis von `!wx`
+    !warn                 -> overview across four parts of the state
+    !warn 46.60 13.67     -> only the municipality at this position
+    !warn waidegg         -> the same via the place directory of `!wx`
 """
 
 from __future__ import annotations
@@ -27,8 +26,8 @@ from typing import Any
 
 import httpx
 
-# Vier Abfragepunkte decken die Landesteile grob ab: Zentralraum, Oberkärnten,
-# Gailtal, Lavanttal. Mehr Punkte kosten Zeit, nicht Airtime.
+# Four query points cover the parts of the state roughly: central area, Upper
+# Carinthia, Gailtal, Lavanttal. More points cost time, not airtime.
 PUNKTE = [
     ("Zentralraum", 46.6247, 14.3053),
     ("Oberkaernten", 46.7956, 13.4967),
@@ -37,7 +36,7 @@ PUNKTE = [
 ]
 
 class QuelleNichtErreichbar(RuntimeError):
-    """Kein Abfragepunkt hat geantwortet — Schweigen ist keine Entwarnung."""
+    """No query point answered — silence is not an all-clear."""
 
 
 STUFE = {1: "GELB", 2: "ORANGE", 3: "ROT"}
@@ -48,16 +47,15 @@ TYP = {
 
 
 async def fetch(client: httpx.AsyncClient, url: str) -> list[dict[str, Any]]:
-    """Warnungen aller Abfragepunkte einsammeln, doppelte zusammenfassen.
+    """Collect warnings from all query points, merging duplicates.
 
-    Wirft, wenn **kein einziger** Punkt geantwortet hat. Ohne diese
-    Unterscheidung sind "nichts gefunden" und "nichts erreicht" dasselbe leere
-    Ergebnis — und der Bot funkt bei ausgefallener Warn-API Entwarnung. Das ist
-    die gefaehrlichste Falschaussage, die ein Warndienst machen kann.
+    Raises when **not a single** point answered. Without that distinction
+    "found nothing" and "reached nothing" are the same empty result — and with
+    the warning API down the bot would transmit an all-clear. That is the most
+    dangerous false statement a warning service can make.
 
-    Ein einzelner erreichter Punkt genuegt dagegen: Die vier Punkte decken
-    verschiedene Landesteile ab, ein Ausfall davon macht die Antwort
-    unvollstaendig, nicht falsch.
+    A single point reached is enough, though: the four points cover different
+    parts of the state, so one failing makes the answer incomplete, not wrong.
     """
     treffer: dict[int, dict[str, Any]] = {}
     erreicht = 0
@@ -88,7 +86,7 @@ async def fetch(client: httpx.AsyncClient, url: str) -> list[dict[str, Any]]:
 
 
 def parse_warnungen(daten: dict[str, Any]) -> list[dict[str, Any]]:
-    """Warnungsliste einer API-Antwort in die interne Form bringen."""
+    """Convert the warning list of an API response into the internal form."""
     eintraege = []
     for w in daten.get("properties", {}).get("warnings", []):
         p = w.get("properties", {})
@@ -96,18 +94,18 @@ def parse_warnungen(daten: dict[str, Any]) -> list[dict[str, Any]]:
             "stufe": p.get("warnstufeid"),
             "typ": p.get("warntypid"),
             "ende": p.get("end"),
-            "gebiete": [],          # bei einer Position steht das Gebiet vorne
+            "gebiete": [],          # with a position the area is already in front
         })
     return eintraege
 
 
 async def fetch_punkt(client: httpx.AsyncClient, url: str, lat: float, lon: float
                       ) -> tuple[str, list[dict[str, Any]]]:
-    """Warnungen fuer genau eine Position — Gemeindename und Warnungen.
+    """Warnings for exactly one position — municipality name and warnings.
 
-    Anders als `fetch` wird hier jeder Fehler durchgereicht: Bei einem einzigen
-    Abfragepunkt gibt es keine Teilabdeckung, die man retten koennte. Ohne
-    Antwort gibt es keine Aussage, und keine Aussage ist keine Entwarnung.
+    Unlike `fetch`, every error is passed through here: with a single query
+    point there is no partial coverage worth salvaging. No answer means no
+    statement, and no statement is not an all-clear.
     """
     resp = await client.get(url, params={"lat": lat, "lon": lon, "lang": "de"})
     resp.raise_for_status()
@@ -117,11 +115,11 @@ async def fetch_punkt(client: httpx.AsyncClient, url: str, lat: float, lon: floa
 
 
 def render_unbekannt(arg: str) -> str:
-    """Ort steht nicht im Verzeichnis.
+    """The place is not in the directory.
 
-    Anders als `!wx` ohne Spott: Wer nach einer Warnung fragt, soll einen Weg
-    bekommen statt eine Pointe. Die Position funktioniert immer, auch fuer
-    Almen und Gipfel, die in keinem Ortsverzeichnis stehen.
+    Unlike `!wx`, without mockery: whoever asks about a warning should get a way
+    forward, not a punchline. A position always works, including for alpine
+    pastures and summits that appear in no place directory.
     """
     ort = " ".join(arg.split())[:20] or "?"
     return f"WARN: {ort} unbekannt. Position geht immer: !warn 46.61 13.85"
@@ -130,9 +128,9 @@ def render_unbekannt(arg: str) -> str:
 def render(warnungen: list[dict[str, Any]], stale: bool = False, ort: str = "KTN") -> str:
     marker = "~" if stale else ""
     if not warnungen:
-        # Auch die Entwarnung braucht das Alterszeichen. Sonst sieht ein Stand
-        # von vor zwei Stunden aus wie eine frische Entwarnung -- und genau da
-        # ist der Unterschied am wichtigsten.
+        # The all-clear needs the staleness marker too. Otherwise a reading from
+        # two hours ago looks like a fresh all-clear -- and that is exactly where
+        # the difference matters most.
         return f"WARN {ort}: {marker}keine Warnungen aktiv"
 
     def rang(w: dict[str, Any]) -> int:
@@ -142,8 +140,8 @@ def render(warnungen: list[dict[str, Any]], stale: bool = False, ort: str = "KTN
     for w in sorted(warnungen, key=rang):
         stufe = STUFE.get(w.get("stufe") or 0, "WARN")
         typ = TYP.get(w.get("typ") or 0, "Warnung")
-        # Bei einer Ortsabfrage steht das Gebiet schon vorne im Kopf — in der
-        # Klammer bleibt dann nur die Uhrzeit, statt den Namen zu wiederholen.
+        # On a place query the area is already in the header — the parentheses
+        # then carry only the time, instead of repeating the name.
         klammer = []
         if w["gebiete"]:
             klammer.append(w["gebiete"][0] if len(w["gebiete"]) < 3 else "KTN weit")
@@ -154,7 +152,7 @@ def render(warnungen: list[dict[str, Any]], stale: bool = False, ort: str = "KTN
         if klammer:
             teil += " (" + " ".join(klammer) + ")"
         teile.append(teil)
-    # Zwei Warnungen passen in eine Nachricht, drei nicht mehr zuverlaessig.
+    # Two warnings fit into one message, three no longer reliably.
     text = f"WARN {ort}: {marker}" + ", ".join(teile[:2])
     if len(teile) > 2:
         text += f" +{len(teile) - 2} weitere"

@@ -1,9 +1,9 @@
-"""!vorhersage — Wetter fuer die naechsten Stunden aus dem GeoSphere-Modell.
+"""!vorhersage — weather for the coming hours from the GeoSphere model.
 
-Datensatz `nwp-v1-1h-2500m`, stuendlich, punktgenau ueber Koordinaten. Ausgegeben
-wird die Spanne bis morgen frueh statt einer Stundenreihe: In 140 Zeichen ist
-Temperaturspanne, Niederschlagssumme und Windspitze das Maximum an Information,
-das noch verstaendlich bleibt.
+Dataset `nwp-v1-1h-2500m`, hourly, point-accurate via coordinates. What is
+returned is the range until tomorrow morning rather than an hourly series: in
+140 characters, a temperature range, a precipitation total and a peak gust are
+the most information that still stays comprehensible.
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ async def fetch(client: httpx.AsyncClient, url: str, lat: float, lon: float,
     return {
         "tmin": min(temp) if temp else None,
         "tmax": max(temp) if temp else None,
-        # rr_acc ist aufsummiert: Differenz zwischen Ende und Anfang ist der Zuwachs.
+        # rr_acc is cumulative: the difference between end and start is the gain.
         "regen": (max(regen) - min(regen)) if regen else None,
         "boe": max(boe) if boe else None,
         "stunden": stunden,

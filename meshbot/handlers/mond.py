@@ -1,11 +1,11 @@
-"""!mond — Mondauf- und -untergang sowie Phase.
+"""!mond — moonrise, moonset and phase.
 
-Wie !sonne bewusst ohne Internetquelle: reine Rechnung, damit der Befehl auch
-dann antwortet, wenn draußen alles hängt.
+Like !sonne, deliberately without an internet source: pure arithmetic, so the
+command still answers when everything outside is stuck.
 
-Genauigkeit: gekürzte Reihen nach Meeus (Astronomical Algorithms, Kap. 47).
-Auf- und Untergang stimmen auf wenige Minuten — mehr braucht niemand, der
-wissen will, ob er nachts ohne Stirnlampe vom Berg kommt.
+Accuracy: truncated series after Meeus (Astronomical Algorithms, ch. 47). Rise
+and set are correct to within a few minutes — nobody wanting to know whether
+they can get off the mountain at night without a headlamp needs more.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from datetime import date, datetime, timedelta, timezone
 RAD = math.pi / 180
 HORIZONT = 0.125          # Mondrand plus Refraktion minus Parallaxe, in Grad
 
-# Hauptglieder der Mondlängen- und -abstandsreihe: D, M, M', F, Längenkoeff, Abstandskoeff
+# Main terms of the lunar longitude and distance series: D, M, M', F, longitude coeff, distance coeff
 GLIEDER = [
     (0, 0, 1, 0, 6288774, -20905355), (2, 0, -1, 0, 1274027, -3699111),
     (2, 0, 0, 0, 658314, -2955968), (0, 0, 2, 0, 213618, -569925),
@@ -31,7 +31,7 @@ GLIEDER = [
     (2, 1, 0, 0, -6766, 30824), (1, 0, -1, 0, -5163, -8379),
     (1, 1, 0, 0, 4987, -16675), (2, -1, 1, 0, 4036, -12831),
 ]
-# Breitenreihe
+# Latitude series
 GLIEDER_B = [
     (0, 0, 0, 1, 5128122), (0, 0, 1, 1, 280602), (0, 0, 1, -1, 277693),
     (2, 0, 0, -1, 173237), (2, 0, -1, 1, 55413), (2, 0, -1, -1, 46271),
@@ -46,7 +46,7 @@ def _jd(zeit: datetime) -> float:
 
 
 def _position(jd: float) -> tuple[float, float]:
-    """Rektaszension und Deklination des Mondes in Grad."""
+    """Right ascension and declination of the moon, in degrees."""
     t = (jd - 2451545.0) / 36525.0
     L = 218.3164477 + 481267.88123421 * t - 0.0015786 * t * t
     D = 297.8501921 + 445267.1114034 * t - 0.0018819 * t * t
@@ -74,7 +74,7 @@ def _position(jd: float) -> tuple[float, float]:
 
 
 def _hoehe(jd: float, lat: float, lon: float) -> float:
-    """Höhe des Mondes über dem Horizont, in Grad."""
+    """Altitude of the moon above the horizon, in degrees."""
     ra, dec = _position(jd)
     t = (jd - 2451545.0) / 36525.0
     gmst = (280.46061837 + 360.98564736629 * (jd - 2451545.0) + 0.000387933 * t * t) % 360
@@ -85,12 +85,12 @@ def _hoehe(jd: float, lat: float, lon: float) -> float:
 
 
 def _phase(jd: float) -> tuple[float, bool]:
-    """(beleuchteter Anteil 0–1, zunehmend?)"""
+    """(illuminated fraction 0–1, waxing?)"""
     t = (jd - 2451545.0) / 36525.0
     D = (297.8501921 + 445267.1114034 * t) % 360
     M = (357.5291092 + 35999.0502909 * t) % 360
     Ms = (134.9633964 + 477198.8675055 * t) % 360
-    # Elongation Sonne–Mond, gekürzt
+    # Sun–moon elongation, truncated
     i = (180 - D - 6.289 * math.sin(Ms * RAD) + 2.100 * math.sin(M * RAD)
          - 1.274 * math.sin((2 * D - Ms) * RAD) - 0.658 * math.sin(2 * D * RAD)
          - 0.214 * math.sin(2 * Ms * RAD) - 0.110 * math.sin(D * RAD))
@@ -98,11 +98,11 @@ def _phase(jd: float) -> tuple[float, bool]:
 
 
 def ereignisse(tag: date, lat: float, lon: float) -> dict[str, datetime | None]:
-    """Auf- und Untergang des Tages in UTC. None heißt: findet heute nicht statt.
+    """Rise and set of the day in UTC. None means: does not occur today.
 
-    Der Mond geht rund 50 Minuten später auf als tags zuvor — an manchen Tagen
-    fällt Aufgang oder Untergang deshalb schlicht aus dem Kalendertag heraus.
-    Das ist kein Fehler und wird auch nicht als solcher gemeldet.
+    The moon rises about 50 minutes later than the day before — on some days
+    rise or set therefore simply falls out of the calendar day. That is not an
+    error and is not reported as one.
     """
     start = datetime(tag.year, tag.month, tag.day, tzinfo=timezone.utc)
     jd0 = _jd(start)
@@ -114,7 +114,7 @@ def ereignisse(tag: date, lat: float, lon: float) -> dict[str, datetime | None]:
         jd = jd0 + i * schritt
         jetzt = _hoehe(jd, lat, lon) - HORIZONT
         if vorher * jetzt < 0:
-            # lineare Interpolation auf die Nullstelle
+            # linear interpolation onto the zero crossing
             anteil = vorher / (vorher - jetzt)
             treffer = start + timedelta(days=(i - 1 + anteil) * schritt)
             if jetzt > 0 and aufgang is None:

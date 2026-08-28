@@ -1,9 +1,9 @@
-"""Fehlt ein Argument, sagt der Bot was fehlt -- und zeigt ein Beispiel.
+"""When an argument is missing, the bot says what -- and shows an example.
 
-Der Bot schweigt bei einem *unbekannten* Befehl, das ist Absicht und spart
-Sendezeit. Ein richtig getippter Befehl mit fehlendem Argument ist aber kein
-Muell: Da fehlt eine Kleinigkeit, und ein Beispiel kostet weniger als eine
-zweite Runde Raten.
+The bot stays silent on an *unknown* command; that is deliberate and saves
+airtime. But a correctly typed command with a missing argument is not garbage:
+something small is missing, and an example costs less than a second round of
+guessing.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ from meshbot.formatting import prepare  # noqa: E402
 from meshbot.main import Bot  # noqa: E402
 from meshbot.router import ALIASES  # noqa: E402
 
-# Befehle, die ohne Argument nichts Sinnvolles tun koennen.
+# Commands that cannot do anything sensible without an argument.
 BRAUCHT_ARGUMENT = ["sota", "az", "sicht", "hoehe", "dist", "qth", "wo", "melde"]
 
 
@@ -51,7 +51,7 @@ def test_hinweis_passt_in_eine_nachricht(cmd):
 
 @pytest.mark.parametrize("cmd", sorted(Bot.USAGE))
 def test_beispiel_ist_ein_echter_befehl(cmd):
-    """Ein Beispiel, das der Bot selbst nicht erkennt, ist schlimmer als keines."""
+    """An example the bot itself does not recognise is worse than none."""
     beispiel = Bot.USAGE[cmd].split("z.B. ", 1)[1]
     for teil in beispiel.split(" oder "):
         wort = teil.strip().split()[0].lstrip("!").lower()
@@ -60,7 +60,7 @@ def test_beispiel_ist_ein_echter_befehl(cmd):
 
 @pytest.mark.parametrize("cmd", BRAUCHT_ARGUMENT)
 def test_leeres_argument_liefert_den_hinweis(cmd):
-    """Der eigentliche Test: Handler ohne Argument aufrufen."""
+    """The actual test: call the handler without an argument."""
     b = bot()
     handler = getattr(b, f"cmd_{cmd}")
     antwort = asyncio.run(handler("", "wer"))
@@ -68,13 +68,13 @@ def test_leeres_argument_liefert_den_hinweis(cmd):
 
 
 def test_usage_kennt_auch_unbekannte_befehle():
-    """Kein Absturz, wenn jemand usage() fuer etwas ohne Eintrag aufruft."""
+    """No crash when usage() is called for something without an entry."""
     assert bot().usage("gibtsnicht") == "!gibtsnicht: Argument fehlt"
 
 
 def test_netz_bleibt_auch_bei_grossen_zahlen_im_limit():
-    """Die Antwort stand bei 99 von 100 Zeichen -- eine Stelle mehr im
-    Tagesverkehr haette den staerksten Repeater abgeschnitten."""
+    """The answer sat at 99 of 100 characters -- one more digit in the daily
+    traffic would have truncated the busiest repeater."""
     from meshbot.handlers import netz as h_netz
 
     s = Settings()

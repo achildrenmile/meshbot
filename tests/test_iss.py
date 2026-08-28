@@ -1,4 +1,4 @@
-"""Ueberflugrechnung. Gegenprobe rein geometrisch, ohne zweite Bibliothek."""
+"""Pass computation. Cross-checked purely geometrically, no second library."""
 
 import asyncio
 import math
@@ -9,7 +9,7 @@ import pytest
 
 from meshbot.handlers import geo, iss
 
-# Echter Datensatz vom 16.08.2026, damit der Test nicht ans Netz muss.
+# A real dataset from 2026-08-16, so the test does not need the network.
 TLE = ("1 25544U 98067A   26228.18012382  .00004999  00000+0  97292-4 0  9998",
        "2 25544  51.6332   3.1747 0007602  51.3505 308.8163 15.49457398581051")
 VILLACH = (46.6167, 13.85)
@@ -41,7 +41,7 @@ def test_ueberflug_ist_plausibel():
 
 
 def test_elevation_stimmt_mit_der_geometrie_ueberein():
-    """Gegenprobe: Bodenabstand und Bahnhoehe muessen dieselbe Elevation ergeben."""
+    """Cross-check: ground distance and orbital altitude must yield the same elevation."""
     from sgp4.api import Satrec
     p = iss.naechster_ueberflug(TLE, *VILLACH, START)
     sat = Satrec.twoline2rv(*TLE)
@@ -60,7 +60,7 @@ def test_elevation_stimmt_mit_der_geometrie_ueberein():
 
 
 def test_kein_ueberflug_am_suedpol():
-    """Die ISS kommt nie ueber 51,6 Grad Breite — am Pol kann nichts kommen."""
+    """The ISS never exceeds 51.6 degrees of latitude — nothing can pass at the pole."""
     assert iss.naechster_ueberflug(TLE, -89.0, 0.0, START, stunden=6) is None
 
 

@@ -1,13 +1,13 @@
-"""!wo — Zustand eines Knotens aus der Karten-API.
+"""!wo — the state of a node, from the map API.
 
-Beantwortet die Frage, die man sonst nur am Rechner beantworten kann: Lebt mein
-Repeater noch? Gerade fuer Betreiber, die am Berg stehen und nicht wissen, ob
-sich die Auffahrt lohnt.
+Answers the question that otherwise needs a computer: is my repeater still
+alive? Especially for operators standing on a mountain, not knowing whether the
+drive up is worth it.
 
-Zweiter Fall: der **Pfad-Hash**. Die App zeigt einen unbekannten Repeater als
-`<Unknown Repeater d733>` -- der Hash ist der Anfang des Public Key. Wer ihn
-aufloesen will, braucht sonst einen Rechner mit Internet. Genau den hat man
-unterwegs nicht, und unterwegs stellt sich die Frage.
+Second case: the **path hash**. The app shows an unknown repeater as
+`<Unknown Repeater d733>` -- the hash is the start of the public key. Resolving
+it otherwise needs a computer with internet. That is exactly what one does not
+have out in the field, and out in the field is where the question comes up.
 """
 
 from __future__ import annotations
@@ -19,9 +19,9 @@ from typing import Any
 
 import httpx
 
-# Ein Pfad-Hash sind die ersten Hexziffern des Public Key: zwei bei 1-Byte-
-# Hashes, vier bei den ueblichen zwei Byte, sechs bei drei. Mehr als acht
-# tippt niemand ab.
+# A path hash is the leading hex digits of the public key: two for 1-byte
+# hashes, four for the usual two bytes, six for three. Nobody types more than
+# eight.
 HASHFORM = re.compile(r"^[0-9a-f]{2,8}$")
 
 
@@ -32,7 +32,7 @@ async def fetch(client: httpx.AsyncClient, basis_url: str) -> list[dict[str, Any
 
 
 def suche_teilstring(nodes: list[dict[str, Any]], begriff: str) -> dict[str, Any] | None:
-    """Nur echte Namensbestandteile, keine Aehnlichkeit."""
+    """Genuine name fragments only, no similarity."""
     b = begriff.strip().lower()
     if not b:
         return None
@@ -41,7 +41,7 @@ def suche_teilstring(nodes: list[dict[str, Any]], begriff: str) -> dict[str, Any
 
 
 def suche(nodes: list[dict[str, Any]], begriff: str) -> dict[str, Any] | None:
-    """Teilstring zuerst, dann Aehnlichkeit — `dobra` findet AT-VI-Dobratsch."""
+    """Substring first, then similarity — `dobra` finds AT-VI-Dobratsch."""
     b = begriff.strip().lower()
     if not b:
         return None
@@ -78,16 +78,16 @@ def render(begriff: str, node: dict[str, Any] | None, jetzt: datetime) -> str:
 
 
 def ist_hashform(begriff: str) -> bool:
-    """Sieht der Begriff wie ein Pfad-Hash aus? Sagt nichts darueber, ob er einen trifft."""
+    """Does the term look like a path hash? Says nothing about whether it hits one."""
     return bool(HASHFORM.match(begriff.strip().lower()))
 
 
 def suche_hash(nodes: list[dict[str, Any]], begriff: str) -> list[dict[str, Any]]:
-    """Alle Knoten, deren Public Key so beginnt — meistverkehrter zuerst.
+    """All nodes whose public key starts this way — busiest first.
 
-    Mehrere Treffer sind kein Fehler, sondern der Grund fuer 2 Byte: Bei einem
-    Byte kollidieren in einem wachsenden Netz irgendwann zwei Knoten auf
-    demselben Hash. Dann muss die Antwort beide nennen.
+    Multiple hits are not an error but the reason for 2 bytes: with one byte,
+    two nodes in a growing network eventually collide on the same hash. The
+    answer then has to name both.
     """
     h = begriff.strip().lower()
     treffer = [n for n in nodes if str(n.get("public_key") or "").lower().startswith(h)]
@@ -101,23 +101,23 @@ def render_hash(begriff: str, treffer: list[dict[str, Any]], jetzt: datetime) ->
         return f"Pfad {h}: kein Knoten mit diesem Hash"
     if len(treffer) == 1:
         return f"Pfad {h} = {render(h, treffer[0], jetzt)}"
-    # Bei einer Kollision zaehlt, wer den Verkehr traegt: Der oberste ist der
-    # wahrscheinlich gemeinte. Drei genannte reichen, die Gesamtzahl steht davor.
+    # On a collision, whoever carries the traffic counts: the top one is the
+    # likely candidate. Naming three is enough, the total precedes them.
     namen = ", ".join(f"{n['name']} ({n.get('relay_count_24h', 0)}/24h)" for n in treffer[:3])
     return f"Pfad {h}: {len(treffer)} Treffer - {namen}"
 
 
 def antwort(nodes: list[dict[str, Any]], begriff: str, jetzt: datetime) -> str:
-    """Hash zuerst, dann Name.
+    """Hash first, then name.
 
-    Ein Begriff kann beides sein: `dead` ist gueltiges Hex und koennte ein
-    Knotenname sein. Deshalb entscheidet nicht die Form allein, sondern der
-    Treffer — greift die Hashsuche ins Leere, laeuft die Namenssuche noch.
+    A term can be both: `dead` is valid hex and could be a node name. So it is
+    not the shape alone that decides but the hit — if the hash lookup comes up
+    empty, the name lookup still runs.
 
-    Fuer hexfoermige Begriffe aber **ohne Aehnlichkeitssuche**: Wer `beef`
-    tippt, meint einen Hash. Ein Fuzzy-Treffer auf einen Knoten namens
-    "Bergfee" waere eine Antwort, die sicher aussieht und falsch ist — hier
-    ist "kenne ich nicht" die bessere Auskunft.
+    For hex-shaped terms, though, **without the similarity search**: typing
+    `beef` means a hash. A fuzzy hit on a node called "Bergfee" would be an
+    answer that looks certain and is wrong — here "never heard of it" is the
+    better information.
     """
     if ist_hashform(begriff):
         treffer = suche_hash(nodes, begriff)

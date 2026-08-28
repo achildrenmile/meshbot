@@ -1,8 +1,7 @@
-"""Minimaler Healthcheck ohne Zusatzabhaengigkeit.
+"""Minimal health check with no extra dependency.
 
-Prueft absichtlich nur den eigenen Prozess und die MQTT-Verbindung — nicht die
-externen APIs. Eine kurze Stoerung bei der GeoSphere ist kein Grund, den
-Container neu zu starten.
+Deliberately covers only our own process and the MQTT connection — not the
+external APIs. A brief GeoSphere hiccup is no reason to restart the container.
 """
 
 from __future__ import annotations

@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
-"""Gipfelverzeichnis aus der SOTA-Gesamtliste bauen.
+"""Build the summit directory from the complete SOTA list.
 
-    ./tools/build_gipfel.py                    baut data/sota_summits.json neu
-    ./tools/build_gipfel.py --assoc OE I S5    nur diese Verbaende
+    ./tools/build_gipfel.py                    rebuilds data/sota_summits.json
+    ./tools/build_gipfel.py --assoc OE I S5    these associations only
 
-Warum aus der CSV und nicht ueber die API: Die Gesamtliste kommt in **einem**
-Abruf, die API braucht einen je Region. Bei zehn Verbaenden waeren das ueber
-hundert Abrufe fuer Daten, die sich einmal am Tag aendern.
+Why from the CSV and not via the API: the complete list arrives in **one**
+fetch, the API needs one per region. With ten associations that would be over a
+hundred fetches for data that changes once a day.
 
-Die Datei versorgt zwei Befehle:
+The file serves two commands:
 
-  !sota <lat lon>   naechster Gipfel zu einer Position
-  !wx <gipfel>      Gipfelwetter, sobald ein Name nicht im Ortsverzeichnis steht
+  !sota <lat lon>   nearest summit to a position
+  !gipfel <summit>  summit weather
 
-Deshalb der grosse Umgriff: Ein Gipfel, der nicht in dieser Datei steht, ist
-fuer den Bot nicht existent -- und Berge enden nicht an der Staatsgrenze.
+Hence the wide scope: a summit that is not in this file does not exist as far as
+the bot is concerned -- and mountains do not end at the national border.
 """
 
 from __future__ import annotations
@@ -30,8 +30,8 @@ from pathlib import Path
 
 URL = "https://storage.sota.org.uk/summitslist.csv"
 
-# Oesterreich und alle Nachbarn, dazu Kroatien. Das ist der Umkreis, in dem
-# jemand aus Kaernten steht, wenn er nach einem Gipfel fragt.
+# Austria and all its neighbours, plus Croatia. That is the radius somebody from
+# Carinthia is standing in when they ask about a summit.
 VERBAENDE = ["OE", "I", "S5", "DL", "HB", "9A", "OK", "OM", "HA", "SP"]
 
 LAENDER = {
@@ -47,7 +47,7 @@ def hole(url: str) -> str:
 
 
 def gueltig(zeile: dict[str, str], heute: date) -> bool:
-    """Aufgelassene Gipfel weglassen -- die SOTA-Liste fuehrt sie weiter mit."""
+    """Drop retired summits -- the SOTA list keeps carrying them."""
     roh = (zeile.get("ValidTo") or "").strip()
     if not roh:
         return True
@@ -59,7 +59,7 @@ def gueltig(zeile: dict[str, str], heute: date) -> bool:
 
 def baue(text: str, verbaende: list[str]) -> dict:
     fh = io.StringIO(text)
-    fh.readline()                        # Kopfzeile mit dem Erstellungsdatum
+    fh.readline()                        # header line carrying the creation date
     heute = date.today()
     gewollt = set(verbaende)
     gipfel = []

@@ -1,8 +1,8 @@
-"""Gipfelwetter fuer Berge diesseits und jenseits der Grenze.
+"""Summit weather for mountains on both sides of the border.
 
-Zwei Dinge muessen stimmen: Der Berg wird gefunden, auch mit anderer
-Schreibweise -- und die Antwort ist als **Modellwert** erkennbar. Eine
-gerechnete Zahl, die aussieht wie eine Messung, ist schlimmer als keine.
+Two things have to hold: the mountain is found, including under a different
+spelling -- and the answer is recognisable as a **model value**. A computed
+number that looks like a measurement is worse than none.
 """
 
 from __future__ import annotations
@@ -45,7 +45,7 @@ def test_gipfel_werden_ueber_die_grenze_gefunden(frage, erwartet):
 
 
 def test_mindestens_zehn_verbaende_im_verzeichnis():
-    """Berge enden nicht an der Staatsgrenze -- das Verzeichnis auch nicht."""
+    """Mountains do not end at the national border -- neither does the directory."""
     verbaende = {g["ref"].split("/")[0] for g in GIPFEL}
     for a in ("OE", "I", "S5", "DL", "HB"):
         assert a in verbaende, f"{a} fehlt"
@@ -91,7 +91,7 @@ def test_antwort_passt_in_eine_nachricht(frage):
     ("dobratsch", "Dobratsch"),             # Villacher Alpe (Dobratsch)
 ])
 def test_langer_doppelname_wird_auf_den_bergnamen_gekuerzt(frage, name):
-    """Hart abschneiden ergaebe `Punta Penia – Marmolad` -- kein Berg, ein Tippfehler."""
+    """Hard truncation would give `Punta Penia – Marmolad` -- not a mountain, a typo."""
     g = h_berg.suche(IDX, frage)
     assert h_berg.render(g, WERTE).startswith(f"WX {name} ")
 
@@ -107,7 +107,7 @@ def test_index_nimmt_bei_namensgleichheit_den_hoeheren():
     assert h_berg.suche(h_berg.index(doppelt), "testberg")["alt"] == 2000
 
 
-# --- Reihenfolge: Sicheres vor Geratenem ---------------------------------
+# --- Order: certain before guessed ---------------------------------------
 
 def _bot():
     from meshbot.handlers import wx as h_wx
@@ -121,29 +121,29 @@ def _bot():
 
 
 def test_exakter_berg_schlaegt_geratenen_ort():
-    """Aus dem Kanal gemeldet: `!wx hochstein` lieferte "Hohenstein St Veit".
+    """Reported from the channel: `!wx hochstein` returned "Hohenstein St Veit".
 
-    Hochstein ist ein Berg in Osttirol, Hohenstein ein Kaerntner Weiler --
-    und auf 0.8 Aehnlichkeit gewann frueher der Weiler, weil das
-    Ortsverzeichnis zuerst gefragt wurde. Ein Treffer, der genau passt, muss
-    vor einem gewinnen, der nur aehnlich klingt.
+    Hochstein is a mountain in East Tyrol, Hohenstein a Carinthian hamlet -- and
+    at 0.8 similarity the hamlet used to win, because the place directory was
+    asked first. A match that fits exactly must beat one that merely sounds
+    similar.
     """
     from meshbot.handlers import wx as h_wx
 
     b = _bot()
-    # Ausgangslage: die Aehnlichkeitssuche trifft wirklich den Weiler.
+    # Starting point: the similarity search really does hit the hamlet.
     geraten = h_wx.resolve_place("hochstein", b.stations, b.settings.default_location)
     assert geraten is not None and "hohenstein" in geraten[0]
-    # Exakt gefragt kennt ihn das Ortsverzeichnis nicht ...
+    # Asked exactly, the place directory does not know it ...
     assert h_wx.resolve_place("hochstein", b.stations, b.settings.default_location,
                               fuzzy=False) is None
-    # ... das Gipfelverzeichnis schon.
+    # ... but the summit directory does.
     berg = h_berg.suche(IDX, "hochstein", fuzzy=False)
     assert berg is not None and berg["name"] == "Hochstein"
 
 
 def test_echter_ort_bleibt_beim_ort():
-    """Villach ist ein Ort und bleibt einer -- gemessen schlaegt gerechnet."""
+    """Villach is a place and stays one -- measured beats computed."""
     from meshbot.handlers import wx as h_wx
 
     b = _bot()
@@ -152,7 +152,7 @@ def test_echter_ort_bleibt_beim_ort():
 
 
 def test_tippfehler_im_ortsnamen_geht_weiterhin():
-    """`vilach` darf weiterhin Villach finden -- nur eben erst im zweiten Anlauf."""
+    """`vilach` may still find Villach -- only on the second attempt now."""
     from meshbot.handlers import wx as h_wx
 
     b = _bot()
@@ -163,12 +163,12 @@ def test_tippfehler_im_ortsnamen_geht_weiterhin():
 
 
 def test_bei_namensgleichheit_gewinnt_der_hoechste_berg():
-    """Hochstein gibt es dreimal: 904 m, 2183 m und 2827 m in Osttirol."""
+    """There are three Hochsteins: 904 m, 2183 m and 2827 m in East Tyrol."""
     assert h_berg.suche(IDX, "hochstein", fuzzy=False)["alt"] == 2827
 
 
 def test_station_auf_dem_gipfel_schlaegt_das_modell():
-    """Auf dem Dobratsch misst die Station "Villacher Alpe", 200 m vom Gipfel."""
+    """On the Dobratsch, the station "Villacher Alpe" measures 200 m from the summit."""
     from meshbot.handlers import wx as h_wx
 
     stationen = h_wx.load_stations(Settings()).get("stationen", [])
@@ -178,7 +178,7 @@ def test_station_auf_dem_gipfel_schlaegt_das_modell():
 
 
 def test_talstation_gilt_nicht_als_gipfelstation():
-    """Naehe allein genuegt nicht -- 1500 m tiefer ist anderes Wetter."""
+    """Proximity alone is not enough -- 1500 m lower is different weather."""
     berg = {"name": "Testgipfel", "alt": 2500, "lat": 46.6, "lon": 13.7, "ref": "X/AA-001"}
     tal = [{"id": "1", "name": "Talstation", "lat": 46.6, "lon": 13.7, "hoehe": 600.0}]
     assert h_berg.station_am_gipfel(tal, berg) is None
@@ -190,20 +190,19 @@ def test_ferne_station_auf_gleicher_hoehe_gilt_auch_nicht():
     assert h_berg.station_am_gipfel(weit, berg) is None
 
 
-# --- Laenge: im Funknetz die halbe Miete ----------------------------------
+# --- Length: half the battle on the radio network -------------------------
 
 @pytest.mark.parametrize("frage", ["goldeck", "latschur", "marmolada", "triglav",
                                    "matterhorn", "grossglockner", "hochstein"])
 def test_gipfelantwort_bleibt_unter_60_zeichen(frage):
-    """Gemessen am 26.08.2026 ueber zwoelf Stunden Funkverkehr:
+    """Measured on 2026-08-26 across twelve hours of radio traffic:
 
-        bis 59 Zeichen   11 von 12 angekommen   (92 %)
-        ab  60 Zeichen    7 von 15 angekommen   (47 %)
+        up to 59 characters   11 of 12 arrived   (92 %)
+        from  60 characters    7 of 15 arrived   (47 %)
 
-    Die Gipfelantworten lagen mit 60 bis 62 Zeichen genau in der schlechten
-    Klasse. Der Luftdruck ist dafuer geflogen -- als `pressure_msl` war er
-    ohnehin auf Meereshoehe zurueckgerechnet und damit keine Aussage ueber
-    den Gipfel.
+    At 60 to 62 characters the summit answers sat squarely in the bad class.
+    Air pressure was dropped for it -- as `pressure_msl` it was reduced to sea
+    level anyway and therefore said nothing about the summit.
     """
     s = Settings()
     g = h_berg.suche(IDX, frage)

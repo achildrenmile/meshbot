@@ -1,8 +1,8 @@
-"""Token-Bucket und Duplikaterkennung.
+"""Token bucket and duplicate detection.
 
-Zwei Bremsen: eine global fuer das Funknetz, eine pro Absender gegen einzelne
-Vielsender. Wird eine ausgeloest, passiert **nichts** — keine Antwort, keine
-Fehlermeldung. Eine Absage kostet genauso viel Sendezeit wie eine Antwort.
+Two brakes: one global one for the radio network, one per sender against
+individual heavy users. When either trips, **nothing** happens — no answer, no
+error message. A refusal costs exactly as much airtime as an answer.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 
 @dataclass
 class TokenBucket:
-    """Klassischer Token-Bucket: `limit` Freigaben je `window` Sekunden."""
+    """Classic token bucket: `limit` grants per `window` seconds."""
 
     limit: int
     window: float
@@ -25,16 +25,16 @@ class TokenBucket:
         self._last = time.monotonic()
 
     def _nachfuellen(self, now: float) -> None:
-        # Nie negativ: Der Aufrufer kann einen Zeitstempel mitgeben, der vor der
-        # Erzeugung des Buckets liegt — dann waere die erste Freigabe verloren.
+        # Never negative: the caller may pass a timestamp from before the bucket
+        # was created — the first grant would otherwise be lost.
         elapsed = max(0.0, now - self._last)
         self._last = max(now, self._last)
         self._tokens = min(float(self.limit), self._tokens + elapsed * self.limit / self.window)
 
     def verfuegbar(self, now: float | None = None) -> int:
-        """Wie viele Freigaben gerade da sind, **ohne** eine zu verbrauchen.
+        """How many grants are available right now, **without** spending one.
 
-        Fuer `!kontingent`: Nachsehen darf nicht dasselbe kosten wie Senden.
+        For `!kontingent`: checking must not cost the same as sending.
         """
         self._nachfuellen(time.monotonic() if now is None else now)
         return int(self._tokens)
@@ -49,7 +49,7 @@ class TokenBucket:
 
 
 class SenderLimiter:
-    """Ein Bucket je Absender, aufgeräumt wird beim Zugriff."""
+    """One bucket per sender, cleaned up on access."""
 
     def __init__(self, limit: int, window: float) -> None:
         self.limit = limit
@@ -60,7 +60,7 @@ class SenderLimiter:
     def allow(self, sender: str) -> bool:
         now = time.monotonic()
         self._seen[sender] = now
-        for key, last in list(self._seen.items()):     # alte Absender vergessen
+        for key, last in list(self._seen.items()):     # forget old senders
             if now - last > self.window * 10:
                 self._seen.pop(key, None)
                 self._buckets.pop(key, None)
@@ -69,10 +69,10 @@ class SenderLimiter:
 
 
 class Deduplicator:
-    """Gleicher Befehl vom gleichen Absender innerhalb des Fensters = Duplikat.
+    """Same command from the same sender within the window = duplicate.
 
-    Im Mesh ist Mehrfachempfang der Normalfall, nicht die Ausnahme: Dasselbe
-    Paket kommt ueber mehrere Repeater herein.
+    On a mesh, receiving something more than once is the normal case, not the
+    exception: the same packet arrives via several repeaters.
     """
 
     def __init__(self, window: float) -> None:

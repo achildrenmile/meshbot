@@ -1,7 +1,7 @@
-"""!spot — wer gerade auf einem Gipfel funkt, aus SOTAwatch.
+"""!spot — who is currently operating from a summit, from SOTAwatch.
 
-Standardmaessig nur oesterreichische Aktivierungen: Eine Liste amerikanischer
-Spots hilft im Kaerntner Mesh niemandem und kostet dieselbe Sendezeit.
+Austrian activations only by default: a list of American spots helps nobody on
+the Carinthian mesh and costs the same airtime.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ async def fetch(client: httpx.AsyncClient, base_url: str, anzahl: int = 25) -> l
     resp = await client.get(f"{base_url}/{anzahl}/all")
     resp.raise_for_status()
     spots = resp.json() or []
-    # Die API fuehrt einen Platzhalter mit "DEPRECATED" als erste Zeile.
+    # The API carries a placeholder entry with "DEPRECATED" as its first line.
     return [s for s in spots if s.get("activatorCallsign") and "DEPRECATED" not in str(s.get("activatorCallsign"))]
 
 

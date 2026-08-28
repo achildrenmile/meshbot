@@ -1,4 +1,4 @@
-"""Einstiegspunkt: MQTT anbinden, Handler verdrahten, sauber beenden."""
+"""Entry point: connect MQTT, wire up handlers, shut down cleanly."""
 
 from __future__ import annotations
 
@@ -49,11 +49,11 @@ class Bot:
         self.stations = h_wx.load_stations(settings)
         self.relais = h_relais.load_relais(settings.relais_file)
         self.summits = h_sota.load_summits(settings.summits_file)
-        # Namensverzeichnis der Gipfel, einmal beim Start gebaut.
+        # Name directory of the summits, built once at startup.
         self.gipfel_index = h_berg.index(self.summits)
         self.cache_wx: TTLCache = TTLCache(maxsize=64, ttl=settings.cache_ttl_wx_s)
         self.cache_berg: TTLCache = TTLCache(maxsize=64, ttl=settings.cache_ttl_wx_s)
-        # Platz fuer die Landesuebersicht und die zuletzt abgefragten Positionen.
+        # Room for the state overview and the most recently queried positions.
         self.cache_warn: TTLCache = TTLCache(maxsize=32, ttl=settings.cache_ttl_warn_s)
         self.cache_sota: TTLCache = TTLCache(maxsize=256, ttl=settings.cache_ttl_sota_s)
         self.cache_spot: TTLCache = TTLCache(maxsize=4, ttl=settings.cache_ttl_spot_s)
@@ -63,11 +63,11 @@ class Bot:
         self.cache_dx: TTLCache = TTLCache(maxsize=2, ttl=settings.cache_ttl_dx_s)
         self.cache_tle: TTLCache = TTLCache(maxsize=2, ttl=settings.cache_ttl_tle_s)
         self.cache_gelaende: TTLCache = TTLCache(maxsize=128, ttl=settings.cache_ttl_gelaende_s)
-        # Ortssuche: Was einmal gefunden ist, bleibt gefunden -- Orte ziehen
-        # nicht um. Der Cache haelt die Kandidatenliste, nicht die Auswahl:
-        # dieselbe Liste bedient die exakte und die geratene Stufe.
+        # Place lookup: once found, stays found -- places do not move. The cache
+        # holds the candidate list, not the selection: the same list serves both
+        # the exact and the guessed stage.
         self.cache_geo: TTLCache = TTLCache(maxsize=256, ttl=settings.cache_ttl_geo_s)
-        # Zonenpolygone aendern sich nur, wenn SOTLAS sie neu rechnet.
+        # Zone polygons only change when SOTLAS recomputes them.
         self.cache_az: TTLCache = TTLCache(maxsize=64, ttl=settings.cache_ttl_az_s)
         self.stale: dict[str, Any] = {}          # letzte gute Antwort je Schlüssel
         self.router = Router(settings, {
@@ -81,32 +81,32 @@ class Bot:
             "az": self.cmd_az, "quota": self.cmd_quota, "gipfel": self.cmd_gipfel,
             "version": self.cmd_version,
         })
-        # Letzter Kontingentstand des Gates. Kommt retained beim Abonnieren.
+        # The gate's last quota state. Arrives retained on subscribe.
         self.quota: dict[str, Any] | None = None
         self.mqtt = MqttClient(settings, on_message=self.on_message,
                                on_admin=self.on_admin, on_quota=self.on_quota)
 
-    # --- Befehle ---------------------------------------------------------
+    # --- Commands --------------------------------------------------------
 
     async def cmd_wx(self, arg: str, sender: str) -> str | None:
-        """Orte, weltweit -- aber Gemessenes vor Gerechnetem und Sicheres vor Geratenem.
+        """Places worldwide -- measured before computed, certain before guessed.
 
-        Fuenf Stufen, und die Reihenfolge ist der ganze Trick:
+        Five stages, and the order is the whole trick:
 
-        1. **Kaernten exakt** -- eine der 34 Stationen misst. Nichts schlaegt das.
-        2. **Sicherer Gipfel** -- `!wx goldeck` ist so angekuendigt.
-        3. **Ortssuche exakt** -- Lienz, Hamburg, Ljubljana. Modellwert.
-        4. **Kaernten geraten** -- der Tippfehler `vilach`, mit Fragezeichen.
-        5. **Ortssuche geraten** -- letzter Versuch, ebenfalls markiert.
+        1. **Carinthia exact** -- one of the 34 stations measures. Nothing beats that.
+        2. **Certain summit** -- `!wx goldeck` was announced that way.
+        3. **Place lookup exact** -- Lienz, Hamburg, Ljubljana. Model value.
+        4. **Carinthia guessed** -- the typo `vilach`, with a question mark.
+        5. **Place lookup guessed** -- last attempt, marked as well.
 
-        Warum 3 vor 4: Ein exakter Treffer soll einen geratenen schlagen, auch
-        ueber die Landesgrenze. Sonst wird "Hamburg" wieder zu "Haimburg".
-        Warum 4 vor 5: umgekehrt genauso -- ohne das wird aus dem Tippfehler
-        "vilach" das spanische Vilachá mit fuenf Einwohnern.
+        Why 3 before 4: an exact match should beat a guessed one, across the
+        border too. Otherwise "Hamburg" turns back into "Haimburg". Why 4 before
+        5: the same in reverse -- without it the typo "vilach" becomes the
+        Spanish Vilachá, population five.
 
-        Was hier bewusst **fehlt**, ist die Aehnlichkeitssuche ueber 9442
-        Gipfel. Sie hat "Lienz" zu "Sandegg - Lienzer" gemacht. Wer einen Berg
-        sucht, nimmt !gipfel.
+        What is deliberately **missing** here is the similarity search across
+        9442 summits. It turned "Lienz" into "Sandegg - Lienzer". Whoever wants
+        a mountain uses !gipfel.
         """
         treffer = h_wx.resolve_place_stufe(arg, self.stations,
                                            self.settings.default_location, fuzzy=False)
@@ -123,9 +123,9 @@ class Bot:
             fremd = await self._wx_fremd(arg, nur_exakt=False)
             return fremd if fremd is not None else h_wx.render_unbekannt(arg)
         ort, station, stufe = treffer
-        # Der Cache haengt an der Station, nicht am Ortsnamen: dreitausend Orte
-        # teilen sich 34 Stationen, Knappenberg und Friesach sind dieselbe
-        # Messung. Am Ortsnamen gecacht holt jeder Weiler die Werte neu.
+        # The cache hangs off the station, not the place name: three thousand
+        # places share 34 stations, and Knappenberg and Friesach are the same
+        # measurement. Cached by place name, every hamlet refetches the values.
         sid = station["station_id"]
         name = station.get("station")
         anzeige = station.get("anzeige")
@@ -146,12 +146,11 @@ class Bot:
         return h_wx.render(ort, werte, station=name, geraten=geraten, anzeige=anzeige)
 
     async def _wx_fremd(self, arg: str, nur_exakt: bool) -> str | None:
-        """Ort ausserhalb Kaerntens: Position suchen, Modellwert holen.
+        """Place outside Carinthia: look up the position, fetch the model value.
 
-        Gibt `None` zurueck, wenn nichts gefunden wurde **oder** die Quelle
-        nicht erreichbar war -- dann laeuft `cmd_wx` seine naechste Stufe. Ein
-        Ausfall der Ortssuche darf nicht dazu fuehren, dass ein Kaerntner
-        Tippfehler unbeantwortet bleibt.
+        Returns `None` when nothing was found **or** the source was unreachable
+        -- `cmd_wx` then runs its next stage. An outage of the place lookup must
+        not leave a Carinthian typo unanswered.
         """
         if not arg.strip() or h_sota.parse_coords(arg) is not None:
             return None
@@ -168,8 +167,8 @@ class Bot:
         if ort is None:
             return None
 
-        # Werte am Ort gecacht, nicht an der Anfrage: "Wien" und "wien " sind
-        # derselbe Ort, und die Ortssuche hat ihn schon zusammengefuehrt.
+        # Values cached per place, not per query: "Wien" and "wien " are the
+        # same place, and the lookup has already merged them.
         ref = f"{ort['latitude']:.3f},{ort['longitude']:.3f}"
         geraten = not nur_exakt
         if ref in self.cache_berg:
@@ -186,33 +185,33 @@ class Bot:
         return h_ort.render(ort, werte, geraten=geraten)
 
     async def cmd_version(self, arg: str, sender: str) -> str | None:
-        """Welcher Stand laeuft gerade -- und was daran neu ist.
+        """Which build is on the air -- and what is new about it.
 
-        Ein Zweizeiler waere schoener, aber es gibt nur eine Zeile. Deshalb
-        Nummer und **eine** Aenderung: Wer meldet "das geht nicht mehr", und
-        wer antwortet "bei mir schon", reden sonst ueber zwei verschiedene
-        Boten. Alles Weitere im Wiki.
+        Two lines would be nicer, but there is only one. Hence the number and
+        **one** change: otherwise whoever reports "this stopped working" and
+        whoever answers "works for me" are talking about two different bots.
+        Everything else is in the wiki.
         """
         return v_mod.render()
 
     async def cmd_gipfel(self, arg: str, sender: str) -> str | None:
-        """Gipfelwetter, ohne Umweg ueber das Ortsverzeichnis.
+        """Summit weather, without the detour through the place directory.
 
-        Der eigene Befehl ist der Punkt an der Sache: In `!wx` mussten Orte und
-        Berge sich eine Suche teilen, und jede Lockerung, die einen Berg fand,
-        verbog einen Ortsnamen -- oder umgekehrt. Getrennt darf `!gipfel` raten,
-        weil hier feststeht, dass ein Berg gemeint ist. Geraten wird es dann
-        auch so genannt.
+        The separate command is the whole point: in `!wx`, places and mountains
+        had to share one search, and every loosening that found a mountain bent
+        a place name out of shape -- or the other way round. Kept apart,
+        `!gipfel` may guess, because here it is established that a mountain is
+        meant. And when it guesses, it says so.
         """
         if not arg.strip():
             return self.usage("gipfel")
         berg, _ = h_berg.suche_stufe(self.gipfel_index, arg, fuzzy=False)
         if berg is not None:
             return await self._wx_gipfel(berg)
-        # Was die SOTA-Liste nicht fuehrt, kennt die Ortssuche oft doch: Die
-        # Petzen steht dort als "Peca" (2125 m), die Koschuta als
-        # "Koschutnikturm". Erst danach wird geraten -- ein fremder Gipfel aus
-        # der Aehnlichkeitssuche ist die schlechteste aller Antworten.
+        # What the SOTA list does not carry, the place lookup often does: the
+        # Petzen is there as "Peca" (2125 m), the Koschuta as "Koschutnikturm".
+        # Only after that comes guessing -- a foreign summit out of the
+        # similarity search is the worst of all answers.
         fremd = await self._wx_fremd(arg, nur_exakt=True)
         if fremd is not None:
             return fremd
@@ -222,13 +221,13 @@ class Bot:
         return await self._wx_gipfel(berg, geraten=stufe == "geraten")
 
     async def _wx_gipfel(self, berg: dict[str, Any], geraten: bool = False) -> str:
-        """Modellwetter fuer einen Gipfel.
+        """Model weather for a summit.
 
-        Getrennt gecacht von den Stationswerten: Beide leben zehn Minuten, aber
-        der Schluessel ist die SOTA-Referenz und nicht die Stations-ID.
+        Cached separately from the station values: both live ten minutes, but
+        the key is the SOTA reference and not the station id.
         """
-        # Auf ein paar Bergen misst wirklich jemand. Dann kommt die Messung,
-        # nicht das Modell -- und der Stationsname steht wie ueberall dabei.
+        # On a few mountains somebody really measures. Then the measurement
+        # wins, not the model -- and the station name is named, as everywhere.
         st = h_berg.station_am_gipfel(self.stations.get("stationen", []), berg)
         if st is not None:
             name = h_berg.kurzname(berg["name"])
@@ -263,16 +262,16 @@ class Bot:
         return h_berg.render(berg, werte, geraten=geraten)
 
     async def cmd_warn(self, arg: str, sender: str) -> str | None:
-        # Mit Position: genau die Gemeinde, in der man steht. Die vier festen
-        # Punkte sind eine Landesuebersicht — sie sagen, dass irgendwo im
-        # Gailtal gewarnt wird, nicht ob es das eigene Tal trifft.
+        # With a position: exactly the municipality you are standing in. The
+        # four fixed points are a state overview — they say that a warning is
+        # out somewhere in the Gailtal, not whether it hits your own valley.
         koord = h_sota.parse_coords(arg)
         if koord is not None:
             return await self._warn_punkt(*koord)
 
-        # Ortsname ueber dasselbe Verzeichnis wie !wx. Genommen wird die
-        # Ortskoordinate, nicht die der Wetterstation: Noetsch misst in Bad
-        # Bleiberg, aber gewarnt wird die Gemeinde, in der man wirklich steht.
+        # Place name via the same directory as !wx. The place coordinate is
+        # used, not the station's: Nötsch measures in Bad Bleiberg, but the
+        # warning applies to the municipality you are actually standing in.
         if arg.strip():
             treffer = h_wx.resolve_place(arg, self.stations, self.settings.default_location)
             if treffer is None:
@@ -292,15 +291,15 @@ class Bot:
         return h_warn.render(warnungen)
 
     def _warn_kopf(self, gemeinde: str, gefragt: str | None) -> str:
-        """Gemeinde dazuschreiben, wenn sie anders heisst als der gefragte Ort.
+        """Name the municipality when it differs from the place asked for.
 
-        Waidegg liegt in der Gemeinde Kirchbach — gewarnt wird immer die
-        Gemeinde. Beides zu nennen ist dieselbe Ehrlichkeit wie bei `!wx`, wo
-        die fremde Messstation in der Klammer steht.
+        Waidegg lies in the municipality of Kirchbach — warnings always apply to
+        the municipality. Naming both is the same honesty as in `!wx`, where the
+        foreign measuring station goes in the parentheses.
 
-        Steckt der gefragte Name schon vorne in der Gemeinde, faellt die
-        Klammer weg: "Noetsch (Noetsch im Gailtal)" sagt nichts und kostet
-        zwanzig Zeichen Sendezeit.
+        If the name asked for is already the start of the municipality, the
+        parentheses are dropped: "Nötsch (Nötsch im Gailtal)" says nothing and
+        costs twenty characters of airtime.
         """
         if not gefragt:
             return gemeinde
@@ -310,11 +309,11 @@ class Bot:
         return f"{gefragt.title()} ({gemeinde})"
 
     async def _warn_punkt(self, lat: float, lon: float, gefragt: str | None = None) -> str:
-        """Warnungen fuer eine Position, gecacht wie die Landesuebersicht.
+        """Warnings for a position, cached like the state overview.
 
-        Der Cacheschluessel ist auf zwei Stellen gerundet: Die API antwortet
-        gemeindeweise, ein Kilometer Unterschied fragt dieselbe Gemeinde ab.
-        Ohne das Runden legt jede Handposition einen eigenen Eintrag an.
+        The cache key is rounded to two decimals: the API answers per
+        municipality, and a kilometre of difference queries the same one.
+        Without the rounding every handheld position creates its own entry.
         """
         key = f"{lat:.2f},{lon:.2f}"
         if key in self.cache_warn:
@@ -334,8 +333,8 @@ class Bot:
     async def cmd_sota(self, arg: str, sender: str) -> str | None:
         if not arg.strip():
             return self.usage("sota")
-        # Position statt Referenz: am Gipfel kennt man die Referenz selten,
-        # das Geraet aber die Koordinaten.
+        # Position instead of reference: on a summit one rarely knows the
+        # reference, but the device knows the coordinates.
         koord = h_sota.parse_coords(arg)
         if koord is not None:
             return h_sota.render_nearest(h_sota.nearest(self.summits, *koord))
@@ -363,11 +362,11 @@ class Bot:
         return h_sota.render(ref, gipfel)
 
     async def cmd_az(self, arg: str, sender: str) -> str:
-        """Liegt die Position in der SOTA-Aktivierungszone?
+        """Is the position inside the SOTA activation zone?
 
-        Geprueft werden bis zu drei Gipfel, naechster zuerst: Zwischen zwei
-        Gipfeln kann der naechstgelegene der falsche sein, und die Frage
-        lautet "bin ich in *einer* Zone", nicht "in der des naechsten".
+        Up to three summits are checked, nearest first: between two summits the
+        nearest one can be the wrong one, and the question is "am I in *a*
+        zone", not "in the nearest one's".
         """
         koord = h_sota.parse_coords(arg)
         if koord is None:
@@ -396,16 +395,16 @@ class Bot:
             urteil = h_az.bewerte(gipfel, koord, ringe)
             if urteil["drin"]:
                 return h_az.render(urteil)
-            # Kein Treffer: das naechstgelegene NEIN ist die beste Auskunft,
-            # falls auch die weiteren Gipfel nichts liefern.
+            # No hit: the nearest NO is the best information available, in case
+            # the remaining summits yield nothing either.
             letzte = letzte or h_az.render(urteil)
         return letzte or h_az.render_kein_gipfel(None)
 
     async def cmd_quota(self, arg: str, sender: str) -> str:
-        """Wie viele Sendungen gehen noch — Gate und Bot nebeneinander.
+        """How many transmissions are left — gate and bot side by side.
 
-        `verfuegbar()` statt `allow()`: Nachsehen darf nichts verbrauchen. Die
-        Antwort selbst kostet trotzdem eine Sendung, und das steht in ihr drin.
+        `verfuegbar()` instead of `allow()`: checking must not spend anything.
+        The answer itself still costs one transmission, and says so.
         """
         return h_quota.render(
             self.quota,
@@ -421,8 +420,8 @@ class Bot:
             return self.usage("relais")
         ort_arg = teile[1] if len(teile) > 1 else self.settings.default_location
 
-        # Bei einer Position braucht es keinen Ortsnamen — "hier" ist kuerzer
-        # und ehrlicher als der Name der naechsten Wetterstation.
+        # With a position no place name is needed — "hier" is shorter and more
+        # honest than the name of the nearest weather station.
         koord = h_sota.parse_coords(ort_arg)
         if koord is not None:
             return h_relais.render(band, "hier", h_relais.suche(self.relais, band, *koord))
@@ -525,7 +524,7 @@ class Bot:
             return self.usage("melde")
         meldung = h_melde.erfassen(arg, sender, datetime.now(timezone.utc))
         nummer = h_melde.speichern(meldung, self.settings.meldungen_datei)
-        # Auch auf MQTT, damit andere Dienste daraus etwas machen koennen.
+        # On MQTT as well, so other services can do something with it.
         self.mqtt.publish(self.settings.topic_meldung, json.dumps({**meldung, "nr": nummer}, ensure_ascii=False))
         log.info("meldung", nr=nummer, von=sender, text=meldung["text"][:60])
         return h_melde.render(meldung, nummer)
@@ -546,14 +545,14 @@ class Bot:
     async def cmd_ping(self, arg: str, sender: str) -> str:
         return f"{self.settings.bot_name} OK, up {self.router.uptime()}, {self.router.served} cmds"
 
-    # --- Standort und Gelaende ----------------------------------------
+    # --- Location and terrain --------------------------------------------
 
     async def cmd_sicht(self, arg: str, sender: str) -> str:
-        """Funkstrecke zwischen zwei Punkten pruefen.
+        """Check the radio path between two points.
 
-        Der teuerste Befehl im Bot: eine Hoehenabfrage ueber 85 Punkte. Das
-        Ergebnis wird eine Woche lang behalten -- das Gelaende aendert sich
-        nicht, und dieselbe Strecke wird erfahrungsgemaess mehrfach gefragt.
+        The most expensive command in the bot: an elevation query over 85
+        points. The result is kept for a week -- the terrain does not change,
+        and experience shows the same path gets asked about repeatedly.
         """
         punkte = h_geo.parse_punkte(arg, 2)
         if punkte is None:
@@ -595,13 +594,13 @@ class Bot:
         return h_geo.render_hoehe(p, meter)
 
     async def cmd_dist(self, arg: str, sender: str) -> str:
-        """Reine Rechnung, keine Quelle, keine Wartezeit."""
+        """Pure arithmetic, no source, no waiting."""
         punkte = h_geo.parse_punkte(arg, 2)
         if punkte is None:
             return self.usage("dist")
         return h_geo.render_dist(*punkte)
 
-    # --- Himmel ---------------------------------------------------------
+    # --- Sky -------------------------------------------------------------
 
     async def cmd_dx(self, arg: str, sender: str) -> str:
         if "aktuell" in self.cache_dx:
@@ -642,16 +641,16 @@ class Bot:
                     return "ISS: Bahndaten nicht erreichbar"
                 alt = True                     # gealterte TLE, Zeiten ungenauer
         jetzt = datetime.now(timezone.utc)
-        # Die Bahnrechnung ist reine CPU-Arbeit und blockiert sonst die Schleife.
+        # The orbit computation is pure CPU work and would block the loop.
         ueberflug = await asyncio.to_thread(h_iss.naechster_ueberflug, tle, *koord, jetzt)
         return h_iss.render(ueberflug, self.settings.tz_offset_h, alt)
 
-    # Was ein Befehl braucht, wenn es fehlt -- Aufbau und ein Beispiel zum
-    # Abtippen. Das Beispiel ist der wichtigere Teil: Wer `!sicht` ohne
-    # Argumente tippt, weiss meist nicht, in welchem Format zwei Positionen
-    # erwartet werden, und `<lat,lon>` beantwortet das nicht.
+    # What a command needs when it is missing -- the shape and an example to
+    # copy. The example is the more important half: someone typing `!sicht`
+    # without arguments usually does not know what format two positions are
+    # expected in, and `<lat,lon>` does not answer that.
     #
-    # Format uebrall gleich: "!befehl <was> - z.B. !befehl konkret".
+    # Same shape everywhere: "!command <what> - z.B. !command concrete".
     USAGE = {
         "wx": "!wx <ort|gipfel|lat lon> - z.B. !wx villach oder !wx triglav",
         "vorhersage": "!vorhersage <ort|lat lon> - z.B. !vorhersage spittal",
@@ -699,7 +698,7 @@ class Bot:
         "iss": "!iss [lat lon] naechster Ueberflug der Raumstation ueber 10 Grad",
     }
 
-    # Gruppen fuer die zweite Hilfestufe. Die Reihenfolge ist die der Uebersicht.
+    # Groups for the second help stage. The order matches the overview.
     GRUPPEN = {
         "wetter": ["wx", "gipfel", "vorhersage", "warn", "lawine"],
         "berg": ["gipfel", "sota", "az", "spot", "sonne", "mond"],
@@ -709,27 +708,26 @@ class Bot:
     }
 
     def usage(self, cmd: str) -> str:
-        """Was fehlt und wie es aussieht, wenn es da ist.
+        """What is missing, and what it looks like when present.
 
-        Bewusst eine Antwort und kein Schweigen: Ein Befehl, den jemand
-        richtig getippt hat, ist kein Muell -- da fehlt nur ein Argument.
-        Die Sendezeit dafuer ist besser angelegt als eine zweite Runde
-        Raten. Bei einem *unbekannten* Befehl schweigt der Bot weiterhin.
+        An answer rather than silence, on purpose: a command somebody typed
+        correctly is not garbage -- it is only missing an argument. The airtime
+        is better spent on that than on a second round of guessing. For an
+        *unknown* command the bot still stays silent.
         """
         return self.USAGE.get(cmd, f"!{cmd}: Argument fehlt")
 
     async def cmd_help(self, arg: str, sender: str) -> str:
-        """Dreistufig: Einzelbefehl, Gruppe, Uebersicht.
+        """Three stages: single command, group, overview.
 
-        Aliase werden mitaufgeloest, aber **erst nach den Gruppen**: `wetter`
-        ist beides -- Alias fuer !wx und Name einer Gruppe. Wer `!help wetter`
-        tippt, meint die Gruppe. Ohne diese Reihenfolge fuehrt ein
-        veroeffentlichter Alias wie !pfad ins Leere: Der Befehl antwortet, seine
-        Hilfe nicht.
+        Aliases are resolved too, but **only after the groups**: `wetter` is
+        both -- an alias for !wx and the name of a group. Whoever types
+        `!help wetter` means the group. Without that ordering a published alias
+        such as !pfad leads nowhere: the command answers, its help does not.
 
-        `netz` ist beides auf andere Weise: ein Befehl **und** eine Gruppe. Wer
-        danach fragt, bekommt beides in einer Nachricht -- vorher gewann der
-        Befehl, und die Gruppe war ueberhaupt nicht erreichbar.
+        `netz` is both in a different way: a command **and** a group. Asking for
+        it returns both in one message -- previously the command won and the
+        group was unreachable altogether.
         """
         thema = arg.strip().lstrip("!").lower()
         befehl = self.HILFE.get(thema)
@@ -738,10 +736,9 @@ class Bot:
             gruppe = f"{thema.title()}: " + " ".join("!" + c for c in self.GRUPPEN[thema])
 
         if befehl and gruppe:
-            # Der Befehl steht in der Gruppenliste schon drin -- ihn im
-            # angehaengten Hilfetext ein zweites Mal zu nennen liest sich wie
-            # ein Fehler. Also nur die Erklaerung anhaengen, ohne das "!netz"
-            # davor.
+            # The command is already in the group listing -- naming it a second
+            # time in the appended help text reads like a bug. So append only
+            # the explanation, without the "!netz" in front of it.
             erklaerung = befehl[len(f"!{thema} "):] if befehl.startswith(f"!{thema} ") else befehl
             beides = f"{gruppe} | {erklaerung}"
             return beides if len(beides) <= self.settings.nutzlimit else gruppe
@@ -755,23 +752,23 @@ class Bot:
         return self._uebersicht()
 
     def _uebersicht(self) -> str:
-        """Alle Befehle in eine Nachricht — solange sie hineinpassen.
+        """All commands in one message — as long as they fit.
 
-        Die flache Liste ist die bessere Antwort: Wer !help tippt, will sehen
-        was es gibt, nicht erst ein Menue durchklicken. Sie waechst aber mit
-        jedem Befehl. Passt sie nicht mehr, faellt die Antwort automatisch auf
-        die Gruppennamen zurueck, statt am Zeichenlimit abgeschnitten zu werden.
+        The flat list is the better answer: whoever types !help wants to see
+        what exists, not click through a menu first. But it grows with every
+        command. Once it no longer fits, the answer falls back to the group
+        names by itself instead of being truncated at the character limit.
         """
-        # Ein Befehl darf in zwei Gruppen stehen -- !gipfel ist Wetter und Berg.
-        # In der flachen Liste waere er dann doppelt, und die Zaehlung falsch.
+        # A command may appear in two groups -- !gipfel is weather and mountain.
+        # In the flat list it would show up twice, and the count would be wrong.
         alle = list(dict.fromkeys(c for gruppe in self.GRUPPEN.values() for c in gruppe))
         grenze = self.settings.nutzlimit
-        # Von der schoensten zur kuerzesten Form, erste die passt gewinnt.
+        # From the nicest to the shortest form; the first that fits wins.
         #
-        # Die Gruppenform ist seit der Senkung auf 100 Zeichen der Normalfall,
-        # nicht mehr die Notbremse -- deshalb nennt sie die Anzahl der Befehle.
-        # Ohne sie liest sie sich wie eine Fehlermeldung: fuenf Woerter, und
-        # nicht erkennbar, dass dahinter zwei Dutzend Befehle stehen.
+        # Since the drop to 100 characters the group form is the normal case,
+        # not the emergency brake -- which is why it names the command count.
+        # Without it, it reads like an error message: five words, with no way to
+        # tell that two dozen commands sit behind them.
         for kandidat in (" ".join("!" + c for c in alle) + " | !help <cmd>",
                          " ".join(alle) + " !help <cmd>",
                          " ".join(alle),
@@ -782,7 +779,7 @@ class Bot:
                 return kandidat
         return "!help <thema>: " + " ".join(self.GRUPPEN)
 
-    # --- Infrastruktur ---------------------------------------------------
+    # --- Infrastructure --------------------------------------------------
 
     async def _mit_retry(self, fn: Any, *args: Any) -> Any:
         letzter: Exception | None = None
@@ -816,18 +813,18 @@ class Bot:
             log.warning("bot_fortgesetzt")
 
     def on_quota(self, raw: bytes) -> None:
-        """Kontingentstand des Gates mitschreiben. Laeuft im paho-Thread.
+        """Record the gate's quota state. Runs in the paho thread.
 
-        Unbrauchbare Meldungen werden ignoriert statt den alten Wert zu
-        loeschen: ein veralteter Stand ist mehr wert als gar keiner, und die
-        Antwort sagt ohnehin, woher die Zahl kommt.
+        Unusable messages are ignored rather than clearing the old value: a
+        stale reading is worth more than none, and the answer says where the
+        number came from anyway.
         """
         daten = h_quota.parse(raw)
         if daten is not None:
-            # Protokolliert, damit im Betrieb nachweisbar ist, dass die
-            # Meldung ankommt: Bleibt sie aus, sagt !quota "Gate meldet
-            # nichts" -- und das sieht von aussen genauso aus wie ein
-            # verweigertes Abo oder ein falsches Topic.
+            # Logged so that in operation it is provable the message arrives:
+            # if it stops, !quota says "Gate meldet nichts" -- and from the
+            # outside that looks exactly like a refused subscription or a wrong
+            # topic.
             log.info("quota", **{k: daten.get(k) for k in ("used", "remaining", "limit")})
             self.quota = daten
 

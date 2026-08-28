@@ -1,9 +1,8 @@
-"""Geometrie und Gelände — gemeinsame Basis für !dist, !hoehe und !sicht.
+"""Geometry and terrain — the shared basis for !dist, !hoehe and !sicht.
 
-Alles hier rechnet auf der Kugel, nicht auf dem Ellipsoid. Über die Distanzen,
-um die es in einem LoRa-Netz geht (bis ~150 km), liegt der Fehler unter 0,3 % —
-deutlich unter der Unsicherheit, die ein Höhenmodell mit 25 m Rasterweite
-ohnehin mitbringt.
+Everything here computes on the sphere, not the ellipsoid. Over the distances a
+LoRa network deals with (up to ~150 km) the error stays below 0.3 % — well under
+the uncertainty an elevation model with 25 m grid spacing brings anyway.
 """
 
 from __future__ import annotations
@@ -15,7 +14,7 @@ from typing import Any
 import httpx
 
 R_ERDE = 6371.0
-K_REFRAKTION = 4 / 3          # Standardatmosphäre: Funkstrahl krümmt sich mit
+K_REFRAKTION = 4 / 3          # standard atmosphere: the beam bends along with it
 F_GHZ = 0.869618              # EU-Preset, für den Fresnelradius
 
 ZAHL = re.compile(r"-?\d{1,3}[.,]\d+")
@@ -24,11 +23,12 @@ HIMMELSRICHTUNG = ["N", "NNO", "NO", "ONO", "O", "OSO", "SO", "SSO",
 
 
 def parse_punkte(text: str, anzahl: int = 2) -> list[tuple[float, float]] | None:
-    """Erste `anzahl` Koordinatenpaare aus beliebigem Text.
+    """The first `anzahl` coordinate pairs from arbitrary text.
 
-    Absichtlich stur über Dezimalzahlen: Die MeshCore-App teilt Positionen mal
-    als `46.6,13.8`, mal als `46.6 13.8`, mal eingebettet in einen Satz. Wer
-    Trennzeichen erkennen will, verliert gegen die Wirklichkeit.
+    Deliberately stubborn about decimal numbers: the MeshCore app shares
+    positions sometimes as `46.6,13.8`, sometimes as `46.6 13.8`, sometimes
+    embedded in a sentence. Trying to recognise separators loses against
+    reality.
     """
     zahlen = [float(z.replace(",", ".")) for z in ZAHL.findall(text)]
     if len(zahlen) < 2 * anzahl:
@@ -50,7 +50,7 @@ def distanz_km(a: tuple[float, float], b: tuple[float, float]) -> float:
 
 
 def peilung(a: tuple[float, float], b: tuple[float, float]) -> float:
-    """Rechtweisende Peilung von a nach b, 0–360°."""
+    """True bearing from a to b, 0–360°."""
     la1, lo1, la2, lo2 = map(math.radians, [a[0], a[1], b[0], b[1]])
     dl = lo2 - lo1
     y = math.sin(dl) * math.cos(la2)
@@ -63,7 +63,7 @@ def richtung(grad: float) -> str:
 
 
 def zwischenpunkt(a: tuple[float, float], b: tuple[float, float], f: float) -> tuple[float, float]:
-    """Punkt bei Anteil `f` auf der Großkreisstrecke."""
+    """The point at fraction `f` along the great-circle path."""
     la1, lo1, la2, lo2 = map(math.radians, [a[0], a[1], b[0], b[1]])
     d = 2 * math.asin(math.sqrt(math.sin((la2 - la1) / 2) ** 2
                                 + math.cos(la1) * math.cos(la2) * math.sin((lo2 - lo1) / 2) ** 2))
@@ -78,10 +78,10 @@ def zwischenpunkt(a: tuple[float, float], b: tuple[float, float], f: float) -> t
 
 async def hoehen(client: httpx.AsyncClient, url: str,
                  punkte: list[tuple[float, float]]) -> list[float]:
-    """Geländehöhen in Metern. Wirft, wenn die Quelle Lücken liefert.
+    """Terrain elevations in metres. Raises when the source has gaps.
 
-    Eine Lücke im Modell darf nicht als „0 m Seehöhe" durchrutschen — daraus
-    würde ein freier Sichtstrahl über einen Berg hinweg.
+    A gap in the model must not slip through as "0 m above sea level" — that
+    would turn into a clear line of sight straight over a mountain.
     """
     locs = "|".join(f"{p[0]:.5f},{p[1]:.5f}" for p in punkte)
     resp = await client.get(url, params={"locations": locs}, timeout=30.0)
@@ -93,7 +93,7 @@ async def hoehen(client: httpx.AsyncClient, url: str,
 
 
 def fresnel_radius_m(d1: float, d2: float, gesamt: float) -> float:
-    """Erste Fresnelzone, der Schlauch, der frei bleiben muss."""
+    """First Fresnel zone, the tube that has to stay clear."""
     return 17.3 * math.sqrt(d1 * d2 / (F_GHZ * gesamt))
 
 
@@ -103,21 +103,21 @@ def erdkruemmung_m(d1: float, d2: float) -> float:
 
 def bewerte_profil(hoehen_m: list[float], dist_km: float,
                    mast_a: float, mast_b: float) -> dict[str, Any]:
-    """Engste Stelle der Strecke suchen.
+    """Find the tightest spot along the path.
 
-    Maß ist nicht „Sicht ja/nein", sondern wie viel der ersten Fresnelzone frei
-    bleibt. Ein Strahl, der knapp über den Grat schrammt, ist geometrisch frei
-    und funktechnisch trotzdem tot — deshalb steht der Fresnelanteil in der
-    Antwort und nicht bloß ein Häkchen.
+    The measure is not "line of sight yes/no" but how much of the first Fresnel
+    zone stays clear. A beam that just grazes the ridge is geometrically clear
+    and radio-technically dead all the same — which is why the Fresnel fraction
+    is in the answer and not merely a tick.
     """
     n = len(hoehen_m)
     h1, h2 = hoehen_m[0] + mast_a, hoehen_m[-1] + mast_b
 
-    # Die ersten und letzten Meter zaehlen nicht mit. Zwei Gruende: Dort ist
-    # die Fresnelzone rechnerisch fast null, jede Bodenwelle ergaebe also einen
-    # absurden Prozentwert -- und in dieser Naehe entscheidet die Aufstellung
-    # (Mast, Dachkante, Baum) ueber die Verbindung, nicht das Gelaendeprofil.
-    # Wer 50 m vor der Antenne ein Hindernis hat, sieht das ohne Rechner.
+    # The first and last metres do not count. Two reasons: there the Fresnel
+    # radius is nearly zero by arithmetic, so any bump in the ground would yield
+    # an absurd percentage -- and at that range the mounting (mast, roof edge,
+    # tree) decides the link, not the terrain profile. An obstacle 50 m in front
+    # of the antenna is visible without a computer.
     rand_km = min(0.5, dist_km * 0.05)
 
     eng: dict[str, Any] = {"anteil": 9e9}
@@ -138,15 +138,15 @@ def bewerte_profil(hoehen_m: list[float], dist_km: float,
 
 
 def render_sicht(eng: dict[str, Any]) -> str:
-    """Eine Zeile. Zuerst das Urteil, dann die Zahl, die es begründet."""
+    """One line. The verdict first, then the number behind it."""
     anteil = eng["anteil"]
     if anteil <= 0:
         fehlt = -eng["frei_m"]
         return (f"Sicht {eng['dist']:.1f}km: BLOCKIERT bei km{eng['km']:.1f} "
                 f"({eng['gelaende']:.0f}m, {fehlt:.0f}m zu hoch)")
     urteil = "FREI" if anteil >= 0.6 else "KNAPP"
-    # Ueber 100 % gedeckelt: Mehr als eine ganze freie Fresnelzone bringt
-    # funktechnisch nichts mehr, und "685 %" liest sich wie ein Fehler.
+    # Capped at 100 %: more than one entirely clear Fresnel zone buys nothing
+    # further, and "685 %" reads like a bug.
     prozent = min(anteil, 1.0) * 100
     return (f"Sicht {eng['dist']:.1f}km: {urteil}, Fresnel {prozent:.0f}% "
             f"(enger bei km{eng['km']:.1f}, {eng['gelaende']:.0f}m)")

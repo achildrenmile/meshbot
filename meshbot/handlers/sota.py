@@ -1,13 +1,14 @@
-"""!sota — Gipfel nachschlagen, per Referenz oder per Position.
+"""!sota — look up a summit, by reference or by position.
 
-Zwei Wege, weil man am Gipfel selten die Referenz kennt, das Gerät aber die
-Koordinaten hat:
+Two ways, because on a summit one rarely knows the reference while the device
+does have the coordinates:
 
-    !sota kt-048          -> Nachschlag ueber die SOTA-API
-    !sota 46.60 13.67     -> naechstgelegene Gipfel aus dem lokalen Bestand
+    !sota kt-048          -> lookup via the SOTA API
+    !sota 46.60 13.67     -> nearest summits from the local dataset
 
-Der lokale Bestand (`data/sota_summits.json`) stammt aus der SOTA-API und deckt
-Kaernten samt Nachbarregionen ab. Er braucht kein Netz und antwortet sofort.
+The local dataset (`data/sota_summits.json`) comes from the SOTA list and covers
+Carinthia together with the neighbouring regions. It needs no network and
+answers immediately.
 """
 
 from __future__ import annotations
@@ -68,12 +69,13 @@ def render(ref: str, gipfel: dict[str, Any] | None, stale: bool = False) -> str:
     return teile[0] + " " + ", ".join(teile[1:])
 
 
-# --- Suche nach Position -------------------------------------------------
+# --- Lookup by position --------------------------------------------------
 
 HIMMEL = ["N", "NO", "O", "SO", "S", "SW", "W", "NW"]
-# Zwei Dezimalzahlen irgendwo im Text. Bewusst grosszuegig: Was die App beim
-# Teilen einer Position einfuegt, ist nicht vorhersagbar - mal nackte Zahlen,
-# mal ein geo:-Link, mal mit Beschriftung davor. Abtippen soll niemand muessen.
+# Two decimal numbers anywhere in the text. Generous on purpose: what the app
+# inserts when sharing a position is not predictable - sometimes bare numbers,
+# sometimes a geo: link, sometimes with a label in front. Nobody should have to
+# retype it.
 ZAHL = re.compile(r"-?\d{1,3}[.,]\d+")
 
 
@@ -83,19 +85,19 @@ def load_summits(pfad: Any) -> list[dict[str, Any]]:
 
 
 def parse_coords(arg: str) -> tuple[float, float] | None:
-    """Position aus beliebigem Text ziehen. None, wenn keine drinsteckt.
+    """Pull a position out of arbitrary text. None when there is none.
 
-    Erkannt werden unter anderem::
+    Recognised forms include::
 
         46.60 13.67
         46.6031, 13.6712
-        46,6031, 13,6712              (deutsches Dezimalkomma)
+        46,6031, 13,6712              (German decimal comma)
         geo:46.6031,13.6712
         https://maps.google.com/?q=46.6031,13.6712
         Position: 46.6031 / 13.6712
 
-    Gesucht werden die ersten zwei Dezimalzahlen; ganze Zahlen wie ein
-    Zoomfaktor in einem Kartenlink fallen dadurch nicht ins Gewicht.
+    The first two decimal numbers are used; whole numbers such as a zoom factor
+    in a map link therefore do not interfere.
     """
     treffer = ZAHL.findall(arg)
     if len(treffer) < 2:
@@ -120,7 +122,7 @@ def distanz_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 
 def richtung(lat1: float, lon1: float, lat2: float, lon2: float) -> str:
-    """Grobe Himmelsrichtung vom Standort zum Gipfel."""
+    """Rough compass direction from the position to the summit."""
     dl = math.radians(lon2 - lon1)
     p1, p2 = math.radians(lat1), math.radians(lat2)
     y = math.sin(dl) * math.cos(p2)
@@ -130,7 +132,7 @@ def richtung(lat1: float, lon1: float, lat2: float, lon2: float) -> str:
 
 
 def nearest(summits: list[dict[str, Any]], lat: float, lon: float, limit: int = 2) -> list[dict[str, Any]]:
-    """Naechstgelegene Gipfel, mit Entfernung und Richtung angereichert."""
+    """Nearest summits, enriched with distance and direction."""
     treffer = []
     for s in summits:
         d = distanz_km(lat, lon, s["lat"], s["lon"])

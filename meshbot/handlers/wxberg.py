@@ -1,17 +1,17 @@
-"""Gipfelwetter — `!wx <berggipfel>`, wenn der Name kein Kaerntner Ort ist.
+"""Summit weather — the `!gipfel` command, and `!wx` for unambiguous names.
 
-Die Wetterstationen der GeoSphere enden an der Staatsgrenze, und auf einem
-Gipfel steht ohnehin selten eine. Fuer Berge kommt deshalb ein **Modellwert**
-von Open-Meteo, gerechnet auf die Gipfelhoehe.
+GeoSphere's weather stations end at the national border, and there is rarely one
+on a summit anyway. Mountains therefore get a **model value** from Open-Meteo,
+computed at summit elevation.
 
-**Das ist keine Messung, und die Antwort sagt das auch** -- sie endet auf
-`(Modell)`. Das ist ehrlicher als eine Zahl, die aussieht wie ein Thermometer
-am Gipfelkreuz. Wer den Unterschied nicht sieht, plant eine Tour nach einem
-Modell und haelt es fuer eine Messung.
+**That is not a measurement, and the answer says so** -- it ends in `(Modell)`.
+This is more honest than a number that looks like a thermometer at the summit
+cross. Someone who misses the difference plans a tour on a model and takes it
+for a measurement.
 
-Das Gipfelverzeichnis kommt aus der SOTA-Liste und deckt Oesterreich, Italien,
-Slowenien, Deutschland, die Schweiz, Kroatien, Tschechien, die Slowakei,
-Ungarn und Polen ab -> `tools/build_gipfel.py`.
+The summit directory comes from the SOTA list and covers Austria, Italy,
+Slovenia, Germany, Switzerland, Croatia, Czechia, Slovakia, Hungary and Poland
+-> `tools/build_gipfel.py`.
 """
 
 from __future__ import annotations
@@ -23,63 +23,63 @@ import httpx
 
 from .wx import normalisiere
 
-# Windrichtung wie bei !wx, damit beide Antworten gleich zu lesen sind.
+# Wind direction as in !wx, so both answers read the same way.
 RICHTUNGEN = ("N", "NNO", "NO", "ONO", "O", "OSO", "SO", "SSO",
               "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW")
 
-# Kein Luftdruck. Open-Meteo liefert ihn als `pressure_msl`, also auf
-# Meereshoehe zurueckgerechnet -- auf einem Gipfel ist das kein Messwert von
-# dort, sondern eine Regionalzahl, die ueberall gleich aussieht. Sie kostete
-# neun Zeichen und hat die Antwort ueber 60 Zeichen gehoben, und genau dort
-# faellt die Zustellquote im Funknetz von 92 auf 47 Prozent.
+# No air pressure. Open-Meteo reports it as `pressure_msl`, reduced to sea
+# level -- on a summit that is not a value from up there but a regional number
+# that looks the same everywhere. It cost nine characters and pushed the answer
+# past 60, which is exactly where the delivery rate on the network drops from
+# 92 to 47 per cent.
 FELDER = ("temperature_2m", "relative_humidity_2m", "wind_speed_10m",
           "wind_direction_10m")
 
-# Die SOTA-Liste benennt den **hoechsten Punkt**, der Volksmund das **Massiv**.
-# Wer "Koralpe" tippt, meint den Grossen Speikkogel -- unter "Koralpe" steht
-# dort nichts. Ohne diese Tabelle landet so eine Anfrage in der
-# Aehnlichkeitssuche und bekommt irgendeinen fremden Berg zurueck.
+# The SOTA list names the **highest point**, local usage names the **massif**.
+# Someone typing "Koralpe" means the Grosser Speikkogel -- there is nothing
+# under "Koralpe". Without this table such a query lands in the similarity
+# search and comes back with some unrelated mountain.
 #
-# Nur gepruefte Eintraege: Jeder Schluessel rechts muss im Verzeichnis stehen,
-# sonst faellt die Suche wieder aufs Raten zurueck.
+# Verified entries only: every key on the right must exist in the directory,
+# otherwise the lookup silently falls back to guessing.
 ALIASE = {
     "koralpe": "grosser speikkogel",
     "koralm": "grosser speikkogel",
     "saualpe": "ladinger spitz",
     "kellerwand": "hohe warte",
     "coglians": "hohe warte",
-    # Einwortnamen, bei denen die Wortgrenze nicht hilft: "Glockner" steckt
-    # mitten in "Grossglockner", "Obir" mitten in "Hochobir". Bei
-    # mehrwortigen Namen wie "Grosser Hafner" oder "Hoher Sonnblick" braucht
-    # es das nicht -- da trifft die Wortstufe von selbst.
+    # Single-word names where the word boundary does not help: "Glockner" sits
+    # inside "Grossglockner", "Obir" inside "Hochobir". Multi-word names such as
+    # "Grosser Hafner" or "Hoher Sonnblick" need no alias -- the whole-word
+    # stage finds those by itself.
     "glockner": "grossglockner",
     "obir": "hochobir",
-    # Der Hochstuhl steht unter seinem slowenischen Namen in der Liste
-    # (S5/KA-001, 2236 m). Der Berg ist derselbe, die Grenze laeuft ueber ihn.
+    # The Hochstuhl is in the list under its Slovenian name (S5/KA-001,
+    # 2236 m). Same mountain; the border runs across it.
     "hochstuhl": "stol",
     "stou": "stol",
 }
 
-# Berge, die es gibt -- nur nicht in der SOTA-Liste. Sie fuehrt nur Gipfel mit
-# genug Schartenhoehe; Kaernten hat dort 282 Eintraege, und Petzen, Kornock,
-# Falkert und die Koschuta sind nicht darunter.
+# Mountains that exist -- just not in the SOTA list. It only carries summits
+# with enough prominence; Carinthia has 282 entries there, and Petzen, Kornock,
+# Falkert and the Koschuta are not among them.
 #
-# Ohne diese Tabelle raet die Aehnlichkeitssuche: "Petzen" wurde zu "Pletzen"
-# (ein anderer Berg), "Kornock" zu "Koflernock". Ein Alias hilft nicht -- es
-# gibt nichts, worauf er zeigen koennte. Also die Wahrheit sagen.
+# Without this table the similarity search guesses: "Petzen" became "Pletzen"
+# (a different mountain), "Kornock" became "Koflernock". An alias does not help
+# -- there is nothing for it to point at. So tell the truth instead.
 #
-# Hier gehoert nur hinein, was wirklich fehlt: Der Hochstuhl sah lange danach
-# aus und steht doch drin, unter "Stol". Ein falscher Eintrag hier sperrt einen
-# Gipfel aus, den es gibt -- deshalb prueft ein Test jeden Namen gegen das
-# Verzeichnis.
+# Only what is genuinely missing belongs here: the Hochstuhl looked like a
+# candidate for a long time and is in fact present, under "Stol". A wrong entry
+# here locks out a summit that exists -- which is why a test checks every name
+# against the directory.
 FEHLT = {"petzen", "peca", "kornock", "falkert", "koschuta", "kosuta"}
 
 
 def index(gipfel: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    """Namensverzeichnis, normalisiert wie das Ortsverzeichnis.
+    """Name directory, normalised like the place directory.
 
-    Mehrere Gipfel teilen sich Namen -- bei einer Dublette gewinnt der hoehere.
-    Wer nach "Hochwart" fragt, meint den Berg, nicht den Huegel daneben.
+    Several summits share names -- on a duplicate the higher one wins. Someone
+    asking for "Hochwart" means the mountain, not the hillock next to it.
     """
     aus: dict[str, dict[str, Any]] = {}
     for g in gipfel:
@@ -94,11 +94,11 @@ def index(gipfel: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
 
 
 def _namensvarianten(name: str) -> list[str]:
-    """`Villacher Alpe (Dobratsch)` findet man unter beiden Namen.
+    """`Villacher Alpe (Dobratsch)` is findable under either name.
 
-    Dasselbe bei `Matterhorn/Mont Cervin/Monte Cervino` und bei Bindestrich-
-    Doppelnamen: Wer den slowenischen oder italienischen Namen tippt, meint
-    denselben Berg.
+    The same goes for `Matterhorn/Mont Cervin/Monte Cervino` and for hyphenated
+    double names: whoever types the Slovenian or Italian name means the same
+    mountain.
     """
     varianten = [name]
     if "(" in name and ")" in name:
@@ -113,17 +113,16 @@ def _namensvarianten(name: str) -> list[str]:
 
 def suche_stufe(verzeichnis: dict[str, dict[str, Any]], begriff: str,
                 fuzzy: bool = True) -> tuple[dict[str, Any] | None, str]:
-    """Genau, dann ganzes Wort, dann Aehnlichkeit -- und sagt, welche Stufe traf.
+    """Exact, then whole word, then similarity -- and reports which stage hit.
 
-    Die Stufe ist `exakt`, `wort`, `geraten` oder `keiner`. Die ersten beiden
-    sind Wissen, `geraten` ist eine Vermutung und wird in der Antwort
-    gekennzeichnet.
+    The stage is `exakt`, `wort`, `geraten` or `keiner`. The first two are
+    knowledge; `geraten` is a guess and is marked as such in the answer.
 
-    **Ganzes Wort, nicht Teilstring.** Frueher genuegte es, dass die Anfrage
-    irgendwo im Namen vorkam -- mitten im Wort. So wurde "Eckwand" zu
-    "Bl-eckwand" und "Lienz" zu "Sandegg - Lienz-er". Gemessen an zwei Dutzend
-    echten Bergabfragen kostet die Verschaerfung genau einen Treffer
-    (`glockner` -> Grossglockner); alle anderen trafen ohnehin exakt.
+    **Whole word, not substring.** It used to be enough for the query to appear
+    anywhere in the name -- including mid-word. That turned "Eckwand" into
+    "Bl-eckwand" and "Lienz" into "Sandegg - Lienz-er". Measured against two
+    dozen real summit queries the stricter rule costs exactly one hit
+    (`glockner` -> Grossglockner); every other query matched exactly anyway.
     """
     k = normalisiere(begriff)
     if not k:
@@ -144,21 +143,21 @@ def suche_stufe(verzeichnis: dict[str, dict[str, Any]], begriff: str,
 
 def suche(verzeichnis: dict[str, dict[str, Any]], begriff: str,
           fuzzy: bool = True) -> dict[str, Any] | None:
-    """Wie `suche_stufe`, nur ohne die Stufe -- fuer Aufrufer, die sie nicht brauchen."""
+    """Like `suche_stufe` without the stage -- for callers that do not need it."""
     return suche_stufe(verzeichnis, begriff, fuzzy)[0]
 
 
 def station_am_gipfel(stationen: list[dict[str, Any]], gipfel: dict[str, Any],
                       km: float = 3.0, hoehendiff: float = 300.0) -> dict[str, Any] | None:
-    """Steht eine Wetterstation praktisch auf diesem Gipfel?
+    """Is there a weather station practically on this summit?
 
-    Auf ein paar Bergen misst wirklich jemand -- auf dem Dobratsch etwa steht
-    die Station "Villacher Alpe", 200 m vom Gipfelkreuz und 49 m tiefer. Dort
-    ein Modell zu rechnen waere absurd: **Gemessen schlaegt gerechnet.**
+    On a few mountains somebody really does measure -- on the Dobratsch the
+    station "Villacher Alpe" stands 200 m from the summit cross and 49 m lower.
+    Computing a model there would be absurd: **measured beats computed.**
 
-    Beide Bedingungen muessen gelten. Naehe allein genuegt nicht -- eine
-    Talstation kann in der Luftlinie nah sein und trotzdem 1500 m tiefer
-    liegen, und dann misst sie ein anderes Wetter.
+    Both conditions must hold. Proximity alone is not enough -- a valley station
+    can be close in a straight line and still lie 1500 m lower, where it
+    measures different weather.
     """
     bester = None
     for st in stationen:
@@ -180,11 +179,11 @@ def _entfernung_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 
 async def fetch(client: httpx.AsyncClient, url: str, gipfel: dict[str, Any]) -> dict[str, Any]:
-    """Modellwerte fuer die Gipfelposition, auf die Gipfelhoehe gerechnet.
+    """Model values for the summit position, computed at summit elevation.
 
-    `elevation` ist der Punkt an der Sache: Ohne diesen Parameter antwortet das
-    Modell fuer die mittlere Hoehe seiner Gitterzelle, und die liegt bei einem
-    Gipfel regelmaessig mehrere hundert Meter zu tief.
+    `elevation` is the whole point: without that parameter the model answers for
+    the mean elevation of its grid cell, which on a summit is routinely several
+    hundred metres too low.
     """
     r = await client.get(url, params={
         "latitude": gipfel["lat"], "longitude": gipfel["lon"],
@@ -199,29 +198,29 @@ async def fetch(client: httpx.AsyncClient, url: str, gipfel: dict[str, Any]) -> 
 
 
 def render_unbekannt(begriff: str) -> str:
-    """Kein Gipfel dieses Namens -- und das ist eine brauchbare Auskunft.
+    """No summit by that name -- and that is useful information.
 
-    Die SOTA-Liste fuehrt nur Gipfel mit genug Schartenhoehe; Kaernten hat dort
-    282 Eintraege. Petzen, Kornock und Hochstuhl fehlen ihr. Frueher bekam man
-    dafuer den aehnlichsten fremden Berg, jetzt die Wahrheit plus einen Weg,
-    trotzdem an Werte zu kommen.
+    The SOTA list only carries summits with enough prominence; Carinthia has 282
+    entries. Petzen, Kornock and Falkert are missing from it. This used to
+    return the most similar foreign mountain; now it returns the truth plus a
+    way to get values anyway.
     """
     name = " ".join(begriff.split())[:20] or "Nix"
     if normalisiere(begriff) in FEHLT:
-        # Kein Tippfehler, sondern eine Luecke in der Quelle. Das gehoert
-        # anders beantwortet als "kenn ich nicht".
+        # Not a typo but a gap in the source. That deserves a different answer
+        # than "never heard of it".
         return f"{name.title()}: fehlt der SOTA-Liste. Mit Position gehts: !wx 46.6 13.8"
     return f"{name.title()}: kein Gipfel in der SOTA-Liste. Position geht: !wx 46.6 13.8"
 
 
 def kurzname(name: str, grenze: int = 22) -> str:
-    """Lange Doppelnamen auf den Bergnamen zusammenziehen.
+    """Contract long double names down to the mountain name.
 
-    `Punta Penia – Marmolada` oder `Matterhorn/Mont Cervin/Monte Cervino`
-    sprengen sonst die Nachricht. Hart abschneiden geht nicht -- daraus wird
-    `Punta Penia – Marmolad`, und das ist kein Berg, das ist ein Tippfehler.
-    Genommen wird deshalb die **kuerzeste** der Namensvarianten: meistens der
-    Name, unter dem der Berg bekannt ist.
+    `Punta Penia – Marmolada` or `Matterhorn/Mont Cervin/Monte Cervino` would
+    otherwise blow the message. Hard truncation is not an option -- that yields
+    `Punta Penia – Marmolad`, which is not a mountain but a typo. The
+    **shortest** of the name variants is used instead: usually the name the
+    mountain is known by.
     """
     if len(name) <= grenze:
         return name
@@ -231,12 +230,12 @@ def kurzname(name: str, grenze: int = 22) -> str:
 
 def render(gipfel: dict[str, Any], w: dict[str, Any], stale: bool = False,
            geraten: bool = False) -> str:
-    """Eine Zeile, dieselbe Reihenfolge wie !wx -- plus Hoehe und Modellhinweis.
+    """One line, same order as !wx -- plus elevation and the model marker.
 
-    `geraten` haengt ein Fragezeichen an den Bergnamen. Die SOTA-Liste kennt
-    nicht jeden Berg -- Petzen, Kornock und Hochstuhl fehlen ihr etwa ganz.
-    Fuer die fand die Aehnlichkeitssuche bisher stillschweigend einen fremden
-    Gipfel: "Kornock" wurde zu "Koflernock", "Petzen" zu "Pletzen".
+    `geraten` appends a question mark to the mountain name. The SOTA list does
+    not know every mountain -- Petzen, Kornock and Falkert are missing entirely.
+    For those the similarity search used to silently find a foreign summit:
+    "Kornock" became "Koflernock", "Petzen" became "Pletzen".
     """
     marker = "~" if stale else ""
     name = kurzname(gipfel["name"]) + ("?" if geraten else "")

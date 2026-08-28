@@ -1,11 +1,11 @@
-"""!melde — Abdeckungsluecken und Stoerungen aus dem Funknetz melden.
+"""!melde — report coverage gaps and faults from the radio network.
 
-Der Punkt dieses Befehls: Wer in einem Funkloch steht, hat kein Handynetz. Eine
-Meldung, die erst zu Hause abgesetzt wird, kommt selten. Deshalb nimmt der Bot
-sie direkt ueber Funk entgegen.
+The point of this command: whoever is standing in a dead spot has no mobile
+network. A report that only gets filed once back home rarely gets filed at all.
+So the bot accepts it over the air directly.
 
-Gespeichert wird zweifach — als Datei fuer die Nachwelt und als MQTT-Nachricht
-fuer alles, was daraus etwas machen will (Telegram, Wiki, Karte).
+Stored twice — as a file for posterity and as an MQTT message for anything that
+wants to do something with it (Telegram, wiki, map).
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from .sota import parse_coords
 
 
 def erfassen(text: str, sender: str, jetzt: datetime) -> dict[str, Any]:
-    """Meldung strukturieren. Position wird herausgezogen, wenn eine drinsteht."""
+    """Structure the report. A position is extracted when one is present."""
     koord = parse_coords(text)
     return {
         "zeit": jetzt.isoformat(timespec="seconds"),
@@ -31,7 +31,7 @@ def erfassen(text: str, sender: str, jetzt: datetime) -> dict[str, Any]:
 
 
 def speichern(meldung: dict[str, Any], pfad: Path) -> int:
-    """Anhaengen, nie ueberschreiben. Rueckgabe: laufende Nummer."""
+    """Append, never overwrite. Returns the sequence number."""
     pfad.parent.mkdir(parents=True, exist_ok=True)
     nummer = 1
     if pfad.exists():
@@ -43,7 +43,7 @@ def speichern(meldung: dict[str, Any], pfad: Path) -> int:
 
 
 def render(meldung: dict[str, Any], nummer: int) -> str:
-    """Kurze Bestaetigung — ohne sie weiss niemand, ob die Meldung ankam."""
+    """A short acknowledgement — without it nobody knows the report arrived."""
     teil = f"Meldung #{nummer} notiert"
     if meldung.get("lat") is not None:
         teil += f" ({meldung['lat']:.4f},{meldung['lon']:.4f})"

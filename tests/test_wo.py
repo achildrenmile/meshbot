@@ -1,8 +1,8 @@
-"""!wo und der Pfad-Hash.
+"""!wo and the path hash.
 
-Der Fall, um den es geht: Die App zeigt `<Unknown Repeater d733>` und man steht
-ohne Internet im Gelaende. Der Hash ist der Anfang des Public Key — mehr braucht
-es nicht, um den Knoten zu benennen.
+The case at hand: the app shows `<Unknown Repeater d733>` and you are standing
+out in the field without internet. The hash is the start of the public key —
+nothing more is needed to name the node.
 """
 
 from __future__ import annotations
@@ -60,10 +60,10 @@ def test_laengerer_hash_trifft_denselben_knoten(hashwert):
 
 
 def test_kollision_nennt_alle_und_den_staerksten_zuerst():
-    """Ein Byte Hash heisst zwei Knoten auf `1e` — genau davor warnt das Wiki."""
+    """A one-byte hash means two nodes on `1e` — exactly what the wiki warns about."""
     text = h_wo.antwort(NODES, "1e", JETZT)
     assert text.startswith("Pfad 1e: 2 Treffer")
-    assert text.index("AT-K-Annabichl") < text.index("AT-HE-Waidegg")   # 41 vor 11
+    assert text.index("AT-K-Annabichl") < text.index("AT-HE-Waidegg")   # 41 before 11
 
 
 def test_kollision_nennt_hoechstens_drei():
@@ -74,7 +74,7 @@ def test_kollision_nennt_hoechstens_drei():
 
 
 def test_hexbegriff_ohne_hashtreffer_faellt_auf_die_namenssuche_zurueck():
-    """`dead` ist gueltiges Hex und hier trotzdem ein Name. Form entscheidet nicht, Treffer entscheidet."""
+    """`dead` is valid hex and still a name here. The hit decides, not the shape."""
     text = h_wo.antwort(NODES, "dead", JETZT)
     assert text.startswith("AT-DEAD-Beispiel")
 
@@ -85,14 +85,14 @@ def test_unbekannter_hash_sagt_hash_und_erfindet_nichts():
 
 
 def test_hexbegriff_nimmt_keinen_aehnlichkeitstreffer():
-    """`beef` und ein Knoten "Bergfee" — die Fuzzy-Suche traefe, und das waere falsch.
+    """`beef` and a node "Bergfee" — fuzzy would hit, and that would be wrong.
 
-    Wer Hex tippt, meint einen Hash. Eine plausibel aussehende falsche Antwort
-    ist schlechter als "kenne ich nicht".
+    Typing hex means a hash. A plausible-looking wrong answer is worse than
+    "never heard of it".
     """
     nodes = NODES + [node("Bergfee", "99110000" + "0" * 56, 3)]
     assert h_wo.antwort(nodes, "beef", JETZT) == "Pfad beef: kein Knoten mit diesem Hash"
-    # Ohne Hexform greift die Aehnlichkeitssuche weiterhin.
+    # Without the hex shape, the similarity search still applies.
     assert h_wo.antwort(nodes, "bergfe", JETZT).startswith("Bergfee")
 
 
@@ -120,10 +120,10 @@ def test_antwort_haelt_das_zeichenlimit():
 
 
 def test_help_kennt_die_aliase():
-    """Ein veroeffentlichter Alias ohne Hilfe ist eine halbe Auslieferung.
+    """A published alias without help is half a release.
 
-    !pfad steht im Wiki und im README. Wer daraufhin `!help pfad` tippt, darf
-    nicht die allgemeine Uebersicht bekommen.
+    !pfad is in the wiki and the README. Anyone typing `!help pfad` because of
+    that must not get the general overview.
     """
     import asyncio
 
@@ -137,7 +137,7 @@ def test_help_kennt_die_aliase():
 
 
 def test_help_gruppe_schlaegt_gleichnamigen_alias():
-    """`wetter` ist Alias fuer !wx und Gruppenname. Gemeint ist die Gruppe."""
+    """`wetter` is an alias for !wx and a group name. The group is meant."""
     import asyncio
 
     from meshbot.main import Bot
@@ -151,12 +151,12 @@ def test_help_gruppe_schlaegt_gleichnamigen_alias():
 
 @pytest.mark.parametrize("grenze", [100, 116, 140])
 def test_uebersicht_bleibt_brauchbar(grenze):
-    """Bei jeder Zeichengrenze muss !help noch weiterhelfen.
+    """At every character limit, !help must still be of help.
 
-    Seit MAX_MSG_LEN=124 (100 Zeichen fuer den Bot) passt die flache Liste
-    nicht mehr -- 167-Byte-Pakete kamen im Funknetz nicht zuverlaessig an.
-    Die Gruppenform ist damit der Normalfall und muss das auch aushalten:
-    alle Gruppen genannt, Hinweis auf !help <thema>, innerhalb der Grenze.
+    Since MAX_MSG_LEN=124 (100 characters for the bot) the flat list no longer
+    fits -- 167-byte packets did not arrive reliably on the network. The group
+    form is therefore the normal case and has to hold up as one: all groups
+    named, a pointer to !help <thema>, within the limit.
     """
     from meshbot.main import Bot
 
@@ -166,27 +166,27 @@ def test_uebersicht_bleibt_brauchbar(grenze):
     alle = [c for gruppe in Bot.GRUPPEN.values() for c in gruppe]
     text = bot._uebersicht()
     assert len(text) <= grenze
-    # Entweder jeder Befehl steht drin, oder jede Gruppe -- nie ein Rumpf.
+    # Either every command is listed, or every group -- never a stump.
     vollstaendig = all(c in text for c in alle) or all(g in text for g in Bot.GRUPPEN)
     assert vollstaendig, text
 
 
 def test_uebersicht_nennt_die_anzahl_wenn_die_liste_nicht_passt():
-    """Fuenf Gruppennamen allein lesen sich wie eine Fehlermeldung."""
+    """Five group names on their own read like an error message."""
     from meshbot.main import Bot
 
     bot = Bot.__new__(Bot)
     bot.settings = Settings(max_msg_len=124)
     text = bot._uebersicht()
-    # Anzahl aus den Gruppen rechnen statt hinschreiben: sonst faellt der Test
-    # bei jedem neuen Befehl um, ohne dass etwas kaputt waere. Entdoppelt,
-    # weil !gipfel in zwei Gruppen steht.
+    # Compute the count from the groups instead of writing it down: otherwise
+    # the test falls over on every new command without anything being broken.
+    # Deduplicated, because !gipfel appears in two groups.
     anzahl = len({c for g in Bot.GRUPPEN.values() for c in g})
     assert text.startswith(f"{anzahl} Befehle in {len(Bot.GRUPPEN)} Gruppen:")
 
 
 def test_help_netz_liefert_gruppe_und_befehl():
-    """`netz` ist Befehl und Gruppe. Vorher gewann der Befehl, die Gruppe war unerreichbar."""
+    """`netz` is command and group. The command used to win, leaving the group unreachable."""
     import asyncio
 
     from meshbot.main import Bot
@@ -197,13 +197,13 @@ def test_help_netz_liefert_gruppe_und_befehl():
     assert text.startswith("Netz: ")
     for cmd in Bot.GRUPPEN["netz"]:
         assert "!" + cmd in text
-    assert "Zustand des Mesh" in text          # der Befehlstext haengt hinten dran
-    assert text.count("!netz") == 1, text      # aber der Name nur einmal
+    assert "Zustand des Mesh" in text          # the command text is appended
+    assert text.count("!netz") == 1, text      # but the name only once
     assert len(text) <= bot.settings.nutzlimit
 
 
 def test_help_kollision_faellt_auf_die_gruppe_zurueck_wenn_es_nicht_passt():
-    """Passt beides nicht in eine Nachricht, gewinnt die Gruppe -- nie ein Rumpf."""
+    """If both do not fit in one message, the group wins -- never a stump."""
     import asyncio
 
     from meshbot.main import Bot

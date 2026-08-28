@@ -145,12 +145,16 @@ def main(ziel: str, gepflegt_datei: str) -> None:
                 if len(key) < 3:
                     continue
                 if key not in beste or rang > beste[key][0]:
-                    beste[key] = (rang, el)
+                    # Die Originalschreibweise mitfuehren: Der Schluessel ist
+                    # umlautfrei, damit "noetsch" und "Noetsch" denselben
+                    # Eintrag finden -- gefunkt wird aber "Noetsch im Gailtal"
+                    # so, wie der Ort heisst.
+                    beste[key] = (rang, el, teil.strip())
 
     tal = [s for s in stationen if s["hoehe"] <= TALGRENZE_M]
     orte = {}
     weit = []
-    for key, (_rang, el) in beste.items():
+    for key, (_rang, el, anzeige) in beste.items():
         lat, lon = el["lat"], el["lon"]
         # Ausnahme von der Talgrenze: Mallnitz liegt selbst auf 1200 m,
         # Flattnitz auf 1400, und die Station traegt den Namen des Ortes. Sie
@@ -168,6 +172,10 @@ def main(ziel: str, gepflegt_datei: str) -> None:
             weit.append((round(d), key, st["name"]))
         orte[key] = {"station_id": st["id"], "station": st["name"],
                      "lat": round(lat, 5), "lon": round(lon, 5)}
+        # Nur speichern, wenn sie sich vom Schluessel unterscheidet -- sonst
+        # blaeht ein zweiter, gleicher Name die Datei um 3199 Eintraege auf.
+        if anzeige and anzeige.lower() != key:
+            orte[key]["anzeige"] = anzeige
 
     # Jede Station ist auch selbst ein Ort — sonst scheitert `!wx arriach`.
     # Hier auch die Bergstationen: wer "Villacher Alpe" tippt, meint sie.

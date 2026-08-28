@@ -52,7 +52,19 @@ class Settings(BaseSettings):
     # Reserve lehnt der Node die fertige Nachricht ab (error_code 2) und die
     # Antwort verschwindet spurlos. Absendernamen im Netz gehen bis 21 Zeichen.
     sender_reserve: int = 24
-    transliterate: bool = True
+    # Umlaute duerfen gefunkt werden. Die Displays im Netz koennen sie, und
+    # "Nötsch" ist der Name des Ortes -- "Noetsch" ist eine Notloesung aus der
+    # Zeit, als das nicht feststand.
+    #
+    # Was das kostet: In UTF-8 ist ein Umlaut zwei Byte, ein ASCII-Zeichen
+    # eines. Das Nutzlimit zaehlt Zeichen, die Luft zaehlt Byte -- eine Antwort
+    # mit drei Umlauten ist drei Byte laenger, als die Zeichenzahl vermuten
+    # laesst. Bei der gemessenen Grenze (bis 59 Zeichen kommen 92 % an, ab 60
+    # nur 47 %) ist das der Rede wert, aber kein Grund, Ortsnamen zu verbiegen.
+    #
+    # SOTA-Verbandskuerzel bleiben davon unberuehrt: "OE" ist ein Code, kein
+    # verunglimpftes "Ö", und wird nirgends zurueckuebersetzt.
+    transliterate: bool = False
     default_location: str = "villach"
     sota_default_assoc: str = "OE/KT"
 
@@ -80,6 +92,7 @@ class Settings(BaseSettings):
     cache_ttl_dx_s: int = 900
     cache_ttl_tle_s: int = 21600           # TLE altern langsam, 6h reicht
     cache_ttl_gelaende_s: int = 604800     # Berge bewegen sich nicht
+    cache_ttl_geo_s: int = 604800          # Orte auch nicht
     cache_ttl_az_s: int = 2592000          # SOTLAS-Zonenpolygone, 30 Tage
 
     geosphere_tawes_url: str = (
@@ -95,6 +108,9 @@ class Settings(BaseSettings):
     # Gipfelwetter: Modellwerte fuer Berge, wo keine Station steht und wo die
     # GeoSphere ohnehin endet -- also ausserhalb Oesterreichs.
     berg_url: str = "https://api.open-meteo.com/v1/forecast"
+    # Ortssuche fuer alles ausserhalb der 34 Kaerntner Stationen. Dieselbe
+    # Quelle wie das Gipfelwetter, damit es bei einem Ausfall nur eine gibt.
+    geocode_url: str = "https://geocoding-api.open-meteo.com/v1/search"
     hamqsl_url: str = "https://www.hamqsl.com/solarxml.php"
     tle_url: str = "https://celestrak.org/NORAD/elements/gp.php?CATNR=25544&FORMAT=TLE"
 

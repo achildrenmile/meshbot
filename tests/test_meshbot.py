@@ -1033,7 +1033,15 @@ def test_jeder_befehl_hat_eine_einzelhilfe():
     assert not fehlend, f"ohne Hilfe: {fehlend}"
 
 
-def test_uebersicht_nennt_jeden_befehl():
+def test_jeder_befehl_ist_von_der_uebersicht_aus_erreichbar():
+    """Erreichbar, nicht zwingend genannt.
+
+    Bei 24 Befehlen passt die flache Liste nicht mehr in 100 Zeichen -- die
+    Uebersicht nennt dann die Gruppen. Die Zusage bleibt trotzdem: Von `!help`
+    aus fuehrt zu **jedem** Befehl ein Weg. Ein Befehl, der in keiner Gruppe
+    steht, ist unauffindbar, auch wenn er funktioniert.
+    """
+    from meshbot.main import Bot
     from meshbot.router import ALIASES
     bot = _bot()
     text = run(bot.cmd_help("", "x"))
@@ -1043,7 +1051,10 @@ def test_uebersicht_nennt_jeden_befehl():
         namen = [a for a, ziel in ALIASES.items() if ziel == cmd]
         # Ohne "!" geprueft: In der knappsten Form, die noch alle Namen nennt,
         # spart die Uebersicht das Praefix ein.
-        assert any(n in text for n in namen), f"{cmd} fehlt in der Uebersicht"
+        direkt = any(n in text for n in namen)
+        ueber_gruppe = any(g in text and cmd in liste
+                           for g, liste in Bot.GRUPPEN.items())
+        assert direkt or ueber_gruppe, f"{cmd} ist von !help aus nicht erreichbar"
 
 
 def test_hilfe_passt_in_eine_nachricht():

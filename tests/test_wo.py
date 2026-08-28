@@ -178,7 +178,11 @@ def test_uebersicht_nennt_die_anzahl_wenn_die_liste_nicht_passt():
     bot = Bot.__new__(Bot)
     bot.settings = Settings(max_msg_len=124)
     text = bot._uebersicht()
-    assert text.startswith("22 Befehle in 5 Gruppen:")
+    # Anzahl aus den Gruppen rechnen statt hinschreiben: sonst faellt der Test
+    # bei jedem neuen Befehl um, ohne dass etwas kaputt waere. Entdoppelt,
+    # weil !gipfel in zwei Gruppen steht.
+    anzahl = len({c for g in Bot.GRUPPEN.values() for c in g})
+    assert text.startswith(f"{anzahl} Befehle in {len(Bot.GRUPPEN)} Gruppen:")
 
 
 def test_help_netz_liefert_gruppe_und_befehl():

@@ -17,11 +17,16 @@ ZIEL="${MESHBOT_PATH:-meshbot}"
 DRY=""
 [ "${1:-}" = "--dry-run" ] && DRY="--dry-run"
 
-# Nur der Code. data/ bleibt drueben unangetastet -- dort liegen Meldungen und
-# der Zustand des laufenden Bots, die es hier gar nicht gibt.
+# Code **und** Daten. data/ war lange ausgenommen, mit der Begruendung, dort
+# liege der Zustand des laufenden Bots -- das stimmt nicht: Meldungen und
+# Laufzeitzustand liegen im Volume `meldungen:/data`, das Repo-Verzeichnis
+# landet unter /srv/data. Am 28.08.2026 hat das Geld gekostet: Das
+# Ortsverzeichnis war neu gebaut, ausgerollt, Tests gruen -- und der Bot
+# antwortete weiter mit den alten Namen, weil die Datei nie hinueberkam.
+#
 # Ohne Schraegstrich am Ende: rsync legt den Ordner an, statt seinen Inhalt in
 # das Zielwurzelverzeichnis zu kippen.
-PFADE=(meshbot tools requirements.txt Dockerfile docker-compose.yml)
+PFADE=(meshbot tools data requirements.txt Dockerfile docker-compose.yml)
 
 if [ -z "$DRY" ] && ! .venv/bin/python -m pytest -q >/dev/null 2>&1; then
   echo "Tests rot -- kein Deploy. Erst './.venv/bin/python -m pytest' ansehen." >&2

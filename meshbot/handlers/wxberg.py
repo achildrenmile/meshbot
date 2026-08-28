@@ -35,6 +35,45 @@ RICHTUNGEN = ("N", "NNO", "NO", "ONO", "O", "OSO", "SO", "SSO",
 FELDER = ("temperature_2m", "relative_humidity_2m", "wind_speed_10m",
           "wind_direction_10m")
 
+# Die SOTA-Liste benennt den **hoechsten Punkt**, der Volksmund das **Massiv**.
+# Wer "Koralpe" tippt, meint den Grossen Speikkogel -- unter "Koralpe" steht
+# dort nichts. Ohne diese Tabelle landet so eine Anfrage in der
+# Aehnlichkeitssuche und bekommt irgendeinen fremden Berg zurueck.
+#
+# Nur gepruefte Eintraege: Jeder Schluessel rechts muss im Verzeichnis stehen,
+# sonst faellt die Suche wieder aufs Raten zurueck.
+ALIASE = {
+    "koralpe": "grosser speikkogel",
+    "koralm": "grosser speikkogel",
+    "saualpe": "ladinger spitz",
+    "kellerwand": "hohe warte",
+    "coglians": "hohe warte",
+    # Einwortnamen, bei denen die Wortgrenze nicht hilft: "Glockner" steckt
+    # mitten in "Grossglockner", "Obir" mitten in "Hochobir". Bei
+    # mehrwortigen Namen wie "Grosser Hafner" oder "Hoher Sonnblick" braucht
+    # es das nicht -- da trifft die Wortstufe von selbst.
+    "glockner": "grossglockner",
+    "obir": "hochobir",
+    # Der Hochstuhl steht unter seinem slowenischen Namen in der Liste
+    # (S5/KA-001, 2236 m). Der Berg ist derselbe, die Grenze laeuft ueber ihn.
+    "hochstuhl": "stol",
+    "stou": "stol",
+}
+
+# Berge, die es gibt -- nur nicht in der SOTA-Liste. Sie fuehrt nur Gipfel mit
+# genug Schartenhoehe; Kaernten hat dort 282 Eintraege, und Petzen, Kornock,
+# Falkert und die Koschuta sind nicht darunter.
+#
+# Ohne diese Tabelle raet die Aehnlichkeitssuche: "Petzen" wurde zu "Pletzen"
+# (ein anderer Berg), "Kornock" zu "Koflernock". Ein Alias hilft nicht -- es
+# gibt nichts, worauf er zeigen koennte. Also die Wahrheit sagen.
+#
+# Hier gehoert nur hinein, was wirklich fehlt: Der Hochstuhl sah lange danach
+# aus und steht doch drin, unter "Stol". Ein falscher Eintrag hier sperrt einen
+# Gipfel aus, den es gibt -- deshalb prueft ein Test jeden Namen gegen das
+# Verzeichnis.
+FEHLT = {"petzen", "peca", "kornock", "falkert", "koschuta", "kosuta"}
+
 
 def index(gipfel: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     """Namensverzeichnis, normalisiert wie das Ortsverzeichnis.
@@ -72,26 +111,41 @@ def _namensvarianten(name: str) -> list[str]:
     return [v for v in varianten if v]
 
 
-def suche(verzeichnis: dict[str, dict[str, Any]], begriff: str,
-          fuzzy: bool = True) -> dict[str, Any] | None:
-    """Genau, dann Teilstring, dann Aehnlichkeit.
+def suche_stufe(verzeichnis: dict[str, dict[str, Any]], begriff: str,
+                fuzzy: bool = True) -> tuple[dict[str, Any] | None, str]:
+    """Genau, dann ganzes Wort, dann Aehnlichkeit -- und sagt, welche Stufe traf.
 
-    `fuzzy=False` liefert nur die ersten beiden Stufen. `!wx` fragt damit
-    zweimal: erst nach einem sicheren Bergtreffer, dann -- wenn auch das
-    Ortsverzeichnis nichts Sicheres hatte -- nach einem geratenen.
+    Die Stufe ist `exakt`, `wort`, `geraten` oder `keiner`. Die ersten beiden
+    sind Wissen, `geraten` ist eine Vermutung und wird in der Antwort
+    gekennzeichnet.
+
+    **Ganzes Wort, nicht Teilstring.** Frueher genuegte es, dass die Anfrage
+    irgendwo im Namen vorkam -- mitten im Wort. So wurde "Eckwand" zu
+    "Bl-eckwand" und "Lienz" zu "Sandegg - Lienz-er". Gemessen an zwei Dutzend
+    echten Bergabfragen kostet die Verschaerfung genau einen Treffer
+    (`glockner` -> Grossglockner); alle anderen trafen ohnehin exakt.
     """
     k = normalisiere(begriff)
     if not k:
-        return None
+        return None, "keiner"
+    if k in FEHLT:
+        return None, "fehlt"
+    k = ALIASE.get(k, k)
     if k in verzeichnis:
-        return verzeichnis[k]
-    treffer = [g for name, g in verzeichnis.items() if k in name]
+        return verzeichnis[k], "exakt"
+    treffer = [g for name, g in verzeichnis.items() if f" {k} " in f" {name} "]
     if treffer:
-        return max(treffer, key=lambda g: g.get("alt") or 0)
+        return max(treffer, key=lambda g: g.get("alt") or 0), "wort"
     if not fuzzy:
-        return None
+        return None, "keiner"
     nah = get_close_matches(k, list(verzeichnis), n=1, cutoff=0.82)
-    return verzeichnis[nah[0]] if nah else None
+    return (verzeichnis[nah[0]], "geraten") if nah else (None, "keiner")
+
+
+def suche(verzeichnis: dict[str, dict[str, Any]], begriff: str,
+          fuzzy: bool = True) -> dict[str, Any] | None:
+    """Wie `suche_stufe`, nur ohne die Stufe -- fuer Aufrufer, die sie nicht brauchen."""
+    return suche_stufe(verzeichnis, begriff, fuzzy)[0]
 
 
 def station_am_gipfel(stationen: list[dict[str, Any]], gipfel: dict[str, Any],
@@ -144,6 +198,22 @@ async def fetch(client: httpx.AsyncClient, url: str, gipfel: dict[str, Any]) -> 
     return daten
 
 
+def render_unbekannt(begriff: str) -> str:
+    """Kein Gipfel dieses Namens -- und das ist eine brauchbare Auskunft.
+
+    Die SOTA-Liste fuehrt nur Gipfel mit genug Schartenhoehe; Kaernten hat dort
+    282 Eintraege. Petzen, Kornock und Hochstuhl fehlen ihr. Frueher bekam man
+    dafuer den aehnlichsten fremden Berg, jetzt die Wahrheit plus einen Weg,
+    trotzdem an Werte zu kommen.
+    """
+    name = " ".join(begriff.split())[:20] or "Nix"
+    if normalisiere(begriff) in FEHLT:
+        # Kein Tippfehler, sondern eine Luecke in der Quelle. Das gehoert
+        # anders beantwortet als "kenn ich nicht".
+        return f"{name.title()}: fehlt der SOTA-Liste. Mit Position gehts: !wx 46.6 13.8"
+    return f"{name.title()}: kein Gipfel in der SOTA-Liste. Position geht: !wx 46.6 13.8"
+
+
 def kurzname(name: str, grenze: int = 22) -> str:
     """Lange Doppelnamen auf den Bergnamen zusammenziehen.
 
@@ -159,10 +229,17 @@ def kurzname(name: str, grenze: int = 22) -> str:
     return min(varianten, key=len) if varianten else name[:grenze].rsplit(" ", 1)[0]
 
 
-def render(gipfel: dict[str, Any], w: dict[str, Any], stale: bool = False) -> str:
-    """Eine Zeile, dieselbe Reihenfolge wie !wx -- plus Hoehe und Modellhinweis."""
+def render(gipfel: dict[str, Any], w: dict[str, Any], stale: bool = False,
+           geraten: bool = False) -> str:
+    """Eine Zeile, dieselbe Reihenfolge wie !wx -- plus Hoehe und Modellhinweis.
+
+    `geraten` haengt ein Fragezeichen an den Bergnamen. Die SOTA-Liste kennt
+    nicht jeden Berg -- Petzen, Kornock und Hochstuhl fehlen ihr etwa ganz.
+    Fuer die fand die Aehnlichkeitssuche bisher stillschweigend einen fremden
+    Gipfel: "Kornock" wurde zu "Koflernock", "Petzen" zu "Pletzen".
+    """
     marker = "~" if stale else ""
-    name = kurzname(gipfel["name"])
+    name = kurzname(gipfel["name"]) + ("?" if geraten else "")
     teile = [f"WX {name} {gipfel['alt']}m: {marker}"]
     werte = []
     if w.get("temperature_2m") is not None:

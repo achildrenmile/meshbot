@@ -28,6 +28,26 @@ KLAMMER = re.compile(r"\s*\([^)]*\)")
 PARAMS = "TL,RF,FFAM,DD,P"          # Temperatur, Feuchte, Wind, Richtung, Druck
 HIMMELSRICHTUNG = ["N", "NO", "O", "SO", "S", "SW", "W", "NW"]
 
+# Echte Orte, die es gibt -- nur nicht bei uns. Sie muessen **vor** der
+# Aehnlichkeitssuche abgefangen werden, sonst gewinnt ein Kaerntner Weiler mit
+# aehnlichem Namen: "Hamburg" wurde zu "Haimburg", "Lienz" zu "Lienze".
+#
+# Warum eine Liste und keine schaerfere Schwelle: Es gibt keine. Gemessen an
+# echten Faellen ueberlappen die Aehnlichkeitswerte vollstaendig --
+# `hamburg -> haimburg` liegt bei 0.933 und damit **hoeher** als der echte
+# Tippfehler `vilach -> villach` (0.923). Jede Schwelle, die Hamburg aussperrt,
+# sperrt auch "vilach", "goldek" und "spittall" aus. Dass Hamburg ein echter
+# Ort ausserhalb Kaerntens ist, steht nicht im String -- das ist Wissen, und
+# Wissen gehoert in eine Tabelle.
+AUSSERHALB = {
+    "wien", "graz", "linz", "salzburg", "innsbruck", "bregenz", "eisenstadt",
+    "st poelten", "lienz", "kitzbuehel", "kufstein", "zell am see", "schladming",
+    "hamburg", "berlin", "muenchen", "stuttgart", "frankfurt", "koeln", "dresden",
+    "zuerich", "bern", "basel", "genf", "ljubljana", "maribor", "bled", "jesenice",
+    "triest", "trieste", "udine", "tarvis", "tarvisio", "venedig", "mailand", "rom",
+    "budapest", "prag", "bratislava", "muenchen", "london", "paris", "madrid",
+}
+
 
 def _richtung(grad: float | None) -> str:
     if grad is None:
@@ -83,6 +103,42 @@ def normalisiere(name: str) -> str:
     return " ".join("st" if w == "sankt" else w for w in s.split())
 
 
+def resolve_place_stufe(arg: str, stations: dict[str, Any], default: str,
+                        fuzzy: bool = True) -> tuple[str, dict[str, Any], str] | None:
+    """Wie `resolve_place`, sagt aber dazu, **wie sicher** der Treffer ist.
+
+    Die Stufe ist `exakt`, `koord` oder `geraten`. Nur die ersten beiden sind
+    Wissen; `geraten` ist eine Vermutung der Aehnlichkeitssuche und wird in der
+    Antwort als solche gekennzeichnet. Ohne diese Unterscheidung sieht eine
+    geratene Antwort genauso aus wie eine gewusste — und genau daran ist
+    "Hamburg" als Haimburg durchgegangen.
+    """
+    orte = stations.get("orte", stations)
+
+    koord = parse_coords(arg)
+    if koord is not None:
+        s = station_bei(stations.get("stationen", []), *koord)
+        if s is not None:
+            return s["name"], {"station_id": s["id"], "station": s["name"],
+                               "lat": s["lat"], "lon": s["lon"]}, "koord"
+        return None
+
+    key = normalisiere(arg) or normalisiere(default)
+    if key in orte:
+        return key, orte[key], "exakt"
+    # Bei dreitausend Ortsnamen findet eine lockere Schwelle zu jedem Tippfehler
+    # irgendeinen Weiler. 0.8 laesst "vilach" durch und "xyz" nicht.
+    if not fuzzy:
+        return None
+    # Bekannte Orte ausserhalb der Abdeckung erst gar nicht raten lassen.
+    if key in AUSSERHALB:
+        return None
+    treffer = get_close_matches(key, list(orte), n=1, cutoff=0.8)
+    if treffer:
+        return treffer[0], orte[treffer[0]], "geraten"
+    return None
+
+
 def resolve_place(arg: str, stations: dict[str, Any], default: str,
                   fuzzy: bool = True) -> tuple[str, dict[str, Any]] | None:
     """Ort oder Position auf eine Station abbilden.
@@ -97,27 +153,8 @@ def resolve_place(arg: str, stations: dict[str, Any], default: str,
     auch der Weiler "Hohenstein". Ein **exakter** Bergtreffer muss vor einem
     **geratenen** Ortstreffer kommen.
     """
-    orte = stations.get("orte", stations)
-
-    koord = parse_coords(arg)
-    if koord is not None:
-        s = station_bei(stations.get("stationen", []), *koord)
-        if s is not None:
-            return s["name"], {"station_id": s["id"], "station": s["name"],
-                               "lat": s["lat"], "lon": s["lon"]}
-        return None
-
-    key = normalisiere(arg) or normalisiere(default)
-    if key in orte:
-        return key, orte[key]
-    # Bei dreitausend Ortsnamen findet eine lockere Schwelle zu jedem Tippfehler
-    # irgendeinen Weiler. 0.8 laesst "vilach" durch und "xyz" nicht.
-    if not fuzzy:
-        return None
-    treffer = get_close_matches(key, list(orte), n=1, cutoff=0.8)
-    if treffer:
-        return treffer[0], orte[treffer[0]]
-    return None
+    treffer = resolve_place_stufe(arg, stations, default, fuzzy)
+    return None if treffer is None else (treffer[0], treffer[1])
 
 
 async def fetch(client: httpx.AsyncClient, settings: Settings, station_id: str) -> dict[str, Any]:
@@ -169,22 +206,35 @@ def render_unbekannt(arg: str) -> str:
     key = normalisiere(ort)
     if key in SPEZIAL:
         return "WX: " + SPEZIAL[key]
+    # Ein echter Ort, nur der falsche. Das verdient eine andere Antwort als
+    # ein Tippfehler: Wer "Hamburg" tippt, hat sich nicht vertippt.
+    if key in AUSSERHALB:
+        return f"WX: {ort.title()} liegt ned in Kaernten. 34 Stationen, alle da"
     # Auf der normalisierten Form waehlen, sonst bekommt "villagh" eine andere
     # Antwort als "Villagh" — derselbe Tippfehler soll dieselbe bleiben.
     return "WX: " + SPOTT[sum(key.encode()) % len(SPOTT)].format(ort=ort.title())
 
 
 def render(ort: str, werte: dict[str, Any], stale: bool = False,
-           station: str | None = None) -> str:
+           station: str | None = None, geraten: bool = False,
+           anzeige: str | None = None) -> str:
     """Eine Zeile, feste Reihenfolge: Temperatur, Feuchte, Wind, Druck.
 
     Steht die Station woanders als der gefragte Ort, wird sie mitgenannt. In
     Knappenberg misst niemand — die Werte kommen aus Friesach, und das muss
     dranstehen, sonst haelt es jemand fuer eine Messung vor der Haustuer.
+
+    `geraten` haengt ein Fragezeichen an den Ortsnamen. Ein Zeichen, und die
+    Antwort hoert auf zu behaupten, sie wuesste es: `WX Villach?: 21C` heisst
+    "ich nehme an, du meinst Villach". Vorher war eine geratene Antwort von
+    einer gewussten nicht zu unterscheiden.
     """
     marker = "~" if stale else ""
-    kopf = ort.title()
-    if station and normalisiere(station) != normalisiere(ort):
+    # `anzeige` ist die Originalschreibweise aus OSM ("Noetsch im Gailtal"),
+    # der Schluessel die umlautfreie Suchform. Fehlt sie -- alte Datei, oder
+    # Name und Schluessel sind ohnehin gleich --, tut es der Schluessel.
+    kopf = (anzeige or ort.title()) + ("?" if geraten else "")
+    if station and normalisiere(station) != normalisiere(anzeige or ort):
         kopf = f"{kopf} ({station})"
     teile = [f"WX {kopf}: {marker}"]
     if werte.get("TL") is not None:

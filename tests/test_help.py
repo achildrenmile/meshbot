@@ -41,13 +41,21 @@ def test_uebersicht_passt_in_eine_nachricht():
 
 
 def test_uebersicht_nennt_alle_befehle_solange_es_geht():
-    """Der Node haengt seinen Namen vorn dran — das Budget ist knapp, aber
-    fuer die nackte Liste reicht es. Ein Themenmenue waere die schlechtere
-    Antwort, solange die Namen noch hineinpassen."""
+    """Der Node haengt seinen Namen vorn dran — das Budget ist knapp.
+
+    Solange die nackte Liste hineinpasst, steht sie da; ein Themenmenue waere
+    die schlechtere Antwort. Seit dem 24. Befehl passt sie nicht mehr, dann
+    muessen wenigstens alle **Gruppen** genannt sein. Ein Rumpf aus beidem
+    waere der Fehler, den dieser Test verhindert.
+    """
+    from meshbot.main import Bot
+
     b = bot()
     text = run(b.cmd_help("", "x"))
     fehlend = [c for c in b.router.handlers if c != "help" and c not in text]
-    assert not fehlend, f"nicht in der Uebersicht: {fehlend}"
+    if fehlend:
+        ohne_gruppe = [g for g in Bot.GRUPPEN if g not in text]
+        assert not ohne_gruppe, f"weder Befehle noch Gruppen vollstaendig: {text}"
 
 
 def test_nutzlimit_laesst_platz_fuer_den_absendernamen():

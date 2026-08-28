@@ -54,6 +54,11 @@ ALIASES = {
     "az": "az", "sotaaz": "az", "zone": "az", "gipfelzone": "az", "aktivierungszone": "az",
     "quota": "quota", "kontingent": "quota", "rest": "quota",
     "iss": "iss", "sat": "iss",
+    # "berg" ist zugleich Name einer Hilfegruppe. Kein Konflikt: cmd_help loest
+    # Gruppen vor Aliasen auf, der *Befehl* !berg geht trotzdem. "summit" ist
+    # schon an !sota vergeben und bleibt dort.
+    "gipfel": "gipfel", "berg": "gipfel", "peak": "gipfel",
+    "version": "version", "ver": "version", "stand": "version",
 }
 
 

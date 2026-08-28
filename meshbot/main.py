@@ -16,6 +16,7 @@ from .config import Settings, load_settings
 from .handlers import az as h_az
 from .handlers import dx as h_dx
 from .handlers import geo as h_geo
+from .handlers import ortsuche as h_ort
 from .handlers import iss as h_iss
 from .handlers import quota as h_quota
 from .handlers import lawine as h_lawine
@@ -35,6 +36,8 @@ from .handlers import wxberg as h_berg
 from .health import serve_health
 from .mqtt_client import MqttClient
 from .router import ALIASES, Router
+from .version import VERSION
+from . import version as v_mod
 
 log = structlog.get_logger(__name__)
 
@@ -42,7 +45,7 @@ log = structlog.get_logger(__name__)
 class Bot:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
-        self.http = httpx.AsyncClient(timeout=settings.http_timeout_s, headers={"User-Agent": "MeshBot/1.0 (CarinthiaMesh)"})
+        self.http = httpx.AsyncClient(timeout=settings.http_timeout_s, headers={"User-Agent": f"MeshBot/{VERSION} (CarinthiaMesh)"})
         self.stations = h_wx.load_stations(settings)
         self.relais = h_relais.load_relais(settings.relais_file)
         self.summits = h_sota.load_summits(settings.summits_file)
@@ -60,6 +63,10 @@ class Bot:
         self.cache_dx: TTLCache = TTLCache(maxsize=2, ttl=settings.cache_ttl_dx_s)
         self.cache_tle: TTLCache = TTLCache(maxsize=2, ttl=settings.cache_ttl_tle_s)
         self.cache_gelaende: TTLCache = TTLCache(maxsize=128, ttl=settings.cache_ttl_gelaende_s)
+        # Ortssuche: Was einmal gefunden ist, bleibt gefunden -- Orte ziehen
+        # nicht um. Der Cache haelt die Kandidatenliste, nicht die Auswahl:
+        # dieselbe Liste bedient die exakte und die geratene Stufe.
+        self.cache_geo: TTLCache = TTLCache(maxsize=256, ttl=settings.cache_ttl_geo_s)
         # Zonenpolygone aendern sich nur, wenn SOTLAS sie neu rechnet.
         self.cache_az: TTLCache = TTLCache(maxsize=64, ttl=settings.cache_ttl_az_s)
         self.stale: dict[str, Any] = {}          # letzte gute Antwort je Schlüssel
@@ -71,7 +78,8 @@ class Bot:
             "wo": self.cmd_wo, "melde": self.cmd_melde, "qth": self.cmd_qth,
             "sicht": self.cmd_sicht, "hoehe": self.cmd_hoehe, "dist": self.cmd_dist,
             "dx": self.cmd_dx, "mond": self.cmd_mond, "iss": self.cmd_iss,
-            "az": self.cmd_az, "quota": self.cmd_quota,
+            "az": self.cmd_az, "quota": self.cmd_quota, "gipfel": self.cmd_gipfel,
+            "version": self.cmd_version,
         })
         # Letzter Kontingentstand des Gates. Kommt retained beim Abonnieren.
         self.quota: dict[str, Any] | None = None
@@ -81,45 +89,139 @@ class Bot:
     # --- Befehle ---------------------------------------------------------
 
     async def cmd_wx(self, arg: str, sender: str) -> str | None:
-        """Ort vor Berg -- aber Sicheres vor Geratenem.
+        """Orte, weltweit -- aber Gemessenes vor Gerechnetem und Sicheres vor Geratenem.
 
-        Die Reihenfolge ist der ganze Trick. Frueher gewann jeder Ortstreffer,
-        auch ein geratener: "Hochstein" ist ein Berg in Osttirol, aber auf 0.8
-        Aehnlichkeit eben auch der Weiler "Hohenstein". Deshalb zuerst beide
-        Verzeichnisse **exakt**, und erst danach beide mit Tippfehlertoleranz.
+        Fuenf Stufen, und die Reihenfolge ist der ganze Trick:
+
+        1. **Kaernten exakt** -- eine der 34 Stationen misst. Nichts schlaegt das.
+        2. **Sicherer Gipfel** -- `!wx goldeck` ist so angekuendigt.
+        3. **Ortssuche exakt** -- Lienz, Hamburg, Ljubljana. Modellwert.
+        4. **Kaernten geraten** -- der Tippfehler `vilach`, mit Fragezeichen.
+        5. **Ortssuche geraten** -- letzter Versuch, ebenfalls markiert.
+
+        Warum 3 vor 4: Ein exakter Treffer soll einen geratenen schlagen, auch
+        ueber die Landesgrenze. Sonst wird "Hamburg" wieder zu "Haimburg".
+        Warum 4 vor 5: umgekehrt genauso -- ohne das wird aus dem Tippfehler
+        "vilach" das spanische Vilachá mit fuenf Einwohnern.
+
+        Was hier bewusst **fehlt**, ist die Aehnlichkeitssuche ueber 9442
+        Gipfel. Sie hat "Lienz" zu "Sandegg - Lienzer" gemacht. Wer einen Berg
+        sucht, nimmt !gipfel.
         """
-        treffer = h_wx.resolve_place(arg, self.stations, self.settings.default_location,
-                                     fuzzy=False)
+        treffer = h_wx.resolve_place_stufe(arg, self.stations,
+                                           self.settings.default_location, fuzzy=False)
         if treffer is None:
-            berg = h_berg.suche(self.gipfel_index, arg, fuzzy=False)
+            berg, _ = h_berg.suche_stufe(self.gipfel_index, arg, fuzzy=False)
             if berg is not None:
                 return await self._wx_gipfel(berg)
-            treffer = h_wx.resolve_place(arg, self.stations, self.settings.default_location)
+            fremd = await self._wx_fremd(arg, nur_exakt=True)
+            if fremd is not None:
+                return fremd
+            treffer = h_wx.resolve_place_stufe(arg, self.stations,
+                                               self.settings.default_location)
         if treffer is None:
-            berg = h_berg.suche(self.gipfel_index, arg)
-            if berg is not None:
-                return await self._wx_gipfel(berg)
-            return h_wx.render_unbekannt(arg)
-        ort, station = treffer
+            fremd = await self._wx_fremd(arg, nur_exakt=False)
+            return fremd if fremd is not None else h_wx.render_unbekannt(arg)
+        ort, station, stufe = treffer
         # Der Cache haengt an der Station, nicht am Ortsnamen: dreitausend Orte
         # teilen sich 34 Stationen, Knappenberg und Friesach sind dieselbe
         # Messung. Am Ortsnamen gecacht holt jeder Weiler die Werte neu.
         sid = station["station_id"]
         name = station.get("station")
+        anzeige = station.get("anzeige")
+        geraten = stufe == "geraten"
         if sid in self.cache_wx:
-            return h_wx.render(ort, self.cache_wx[sid], station=name)
+            return h_wx.render(ort, self.cache_wx[sid], station=name, geraten=geraten,
+                                anzeige=anzeige)
         try:
             werte = await self._mit_retry(h_wx.fetch, self.settings, sid)
         except Exception:
             alt = self.stale.get(f"wx:{sid}")
             if alt is None:
                 return "WX: Quelle nicht erreichbar"
-            return h_wx.render(ort, alt, stale=True, station=name)
+            return h_wx.render(ort, alt, stale=True, station=name, geraten=geraten,
+                                anzeige=anzeige)
         self.cache_wx[sid] = werte
         self.stale[f"wx:{sid}"] = werte
-        return h_wx.render(ort, werte, station=name)
+        return h_wx.render(ort, werte, station=name, geraten=geraten, anzeige=anzeige)
 
-    async def _wx_gipfel(self, berg: dict[str, Any]) -> str:
+    async def _wx_fremd(self, arg: str, nur_exakt: bool) -> str | None:
+        """Ort ausserhalb Kaerntens: Position suchen, Modellwert holen.
+
+        Gibt `None` zurueck, wenn nichts gefunden wurde **oder** die Quelle
+        nicht erreichbar war -- dann laeuft `cmd_wx` seine naechste Stufe. Ein
+        Ausfall der Ortssuche darf nicht dazu fuehren, dass ein Kaerntner
+        Tippfehler unbeantwortet bleibt.
+        """
+        if not arg.strip() or h_sota.parse_coords(arg) is not None:
+            return None
+        schluessel = h_wx.normalisiere(arg)
+        kandidaten = self.cache_geo.get(schluessel)
+        if kandidaten is None:
+            try:
+                kandidaten = await self._mit_retry(h_ort.suche_ort,
+                                                   self.settings.geocode_url, arg)
+            except Exception:
+                return None
+            self.cache_geo[schluessel] = kandidaten
+        ort = h_ort.waehle(kandidaten, arg, nur_exakt=nur_exakt)
+        if ort is None:
+            return None
+
+        # Werte am Ort gecacht, nicht an der Anfrage: "Wien" und "wien " sind
+        # derselbe Ort, und die Ortssuche hat ihn schon zusammengefuehrt.
+        ref = f"{ort['latitude']:.3f},{ort['longitude']:.3f}"
+        geraten = not nur_exakt
+        if ref in self.cache_berg:
+            return h_ort.render(ort, self.cache_berg[ref], geraten=geraten)
+        try:
+            werte = await self._mit_retry(h_ort.fetch, self.settings.berg_url, ort)
+        except Exception:
+            alt = self.stale.get(f"geo:{ref}")
+            if alt is None:
+                return None
+            return h_ort.render(ort, alt, stale=True, geraten=geraten)
+        self.cache_berg[ref] = werte
+        self.stale[f"geo:{ref}"] = werte
+        return h_ort.render(ort, werte, geraten=geraten)
+
+    async def cmd_version(self, arg: str, sender: str) -> str | None:
+        """Welcher Stand laeuft gerade -- und was daran neu ist.
+
+        Ein Zweizeiler waere schoener, aber es gibt nur eine Zeile. Deshalb
+        Nummer und **eine** Aenderung: Wer meldet "das geht nicht mehr", und
+        wer antwortet "bei mir schon", reden sonst ueber zwei verschiedene
+        Boten. Alles Weitere im Wiki.
+        """
+        return v_mod.render()
+
+    async def cmd_gipfel(self, arg: str, sender: str) -> str | None:
+        """Gipfelwetter, ohne Umweg ueber das Ortsverzeichnis.
+
+        Der eigene Befehl ist der Punkt an der Sache: In `!wx` mussten Orte und
+        Berge sich eine Suche teilen, und jede Lockerung, die einen Berg fand,
+        verbog einen Ortsnamen -- oder umgekehrt. Getrennt darf `!gipfel` raten,
+        weil hier feststeht, dass ein Berg gemeint ist. Geraten wird es dann
+        auch so genannt.
+        """
+        if not arg.strip():
+            return self.usage("gipfel")
+        berg, _ = h_berg.suche_stufe(self.gipfel_index, arg, fuzzy=False)
+        if berg is not None:
+            return await self._wx_gipfel(berg)
+        # Was die SOTA-Liste nicht fuehrt, kennt die Ortssuche oft doch: Die
+        # Petzen steht dort als "Peca" (2125 m), die Koschuta als
+        # "Koschutnikturm". Erst danach wird geraten -- ein fremder Gipfel aus
+        # der Aehnlichkeitssuche ist die schlechteste aller Antworten.
+        fremd = await self._wx_fremd(arg, nur_exakt=True)
+        if fremd is not None:
+            return fremd
+        berg, stufe = h_berg.suche_stufe(self.gipfel_index, arg)
+        if berg is None:
+            return h_berg.render_unbekannt(arg)
+        return await self._wx_gipfel(berg, geraten=stufe == "geraten")
+
+    async def _wx_gipfel(self, berg: dict[str, Any], geraten: bool = False) -> str:
         """Modellwetter fuer einen Gipfel.
 
         Getrennt gecacht von den Stationswerten: Beide leben zehn Minuten, aber
@@ -132,31 +234,33 @@ class Bot:
             name = h_berg.kurzname(berg["name"])
             sid = st["id"]
             if sid in self.cache_wx:
-                return h_wx.render(name, self.cache_wx[sid], station=st["name"])
+                return h_wx.render(name, self.cache_wx[sid], station=st["name"],
+                                   geraten=geraten)
             try:
                 werte = await self._mit_retry(h_wx.fetch, self.settings, sid)
             except Exception:
                 alt = self.stale.get(f"wx:{sid}")
                 if alt is not None:
-                    return h_wx.render(name, alt, stale=True, station=st["name"])
+                    return h_wx.render(name, alt, stale=True, station=st["name"],
+                                       geraten=geraten)
             else:
                 self.cache_wx[sid] = werte
                 self.stale[f"wx:{sid}"] = werte
-                return h_wx.render(name, werte, station=st["name"])
+                return h_wx.render(name, werte, station=st["name"], geraten=geraten)
 
         ref = berg["ref"]
         if ref in self.cache_berg:
-            return h_berg.render(berg, self.cache_berg[ref])
+            return h_berg.render(berg, self.cache_berg[ref], geraten=geraten)
         try:
             werte = await self._mit_retry(h_berg.fetch, self.settings.berg_url, berg)
         except Exception:
             alt = self.stale.get(f"berg:{ref}")
             if alt is None:
                 return f"WX {berg['name'][:20]}: Modell nicht erreichbar"
-            return h_berg.render(berg, alt, stale=True)
+            return h_berg.render(berg, alt, stale=True, geraten=geraten)
         self.cache_berg[ref] = werte
         self.stale[f"berg:{ref}"] = werte
-        return h_berg.render(berg, werte)
+        return h_berg.render(berg, werte, geraten=geraten)
 
     async def cmd_warn(self, arg: str, sender: str) -> str | None:
         # Mit Position: genau die Gemeinde, in der man steht. Die vier festen
@@ -564,10 +668,13 @@ class Bot:
         "melde": "!melde <was, wo> - z.B. !melde kein Empfang, Bad Bleiberg Ortsmitte",
         "iss": "!iss [lat lon] - ohne Angabe der Standardort, sonst z.B. !iss 46.62 13.85",
         "help": "!help [befehl|thema] - z.B. !help sicht oder !help berg",
+        "gipfel": "!gipfel <berg> - z.B. !gipfel dobratsch oder !gipfel triglav",
     }
 
     HILFE = {
-        "wx": "!wx <ort|gipfel|lat lon> Station in KTN, Gipfelwetter aus dem Modell fuer AT/IT/SI/DE/CH/HR/CZ/SK/HU/PL",
+        "wx": "!wx <ort|lat lon> Messwerte einer der 34 Stationen in Kaernten. Fuer Berge: !gipfel",
+        "gipfel": "!gipfel <berg> Gipfelwetter aus dem Modell, AT/IT/SI/DE/CH/HR/CZ/SK/HU/PL. Alias !berg",
+        "version": "!version welcher Stand laeuft und was daran neu ist. Aliase !ver !stand",
         "vorhersage": "!vorhersage <ort|lat lon> Spanne, Regen und Boeen der naechsten 24h",
         "warn": "!warn [ort|lat lon] amtliche Warnungen der Gemeinde (GeoSphere). Ohne Angabe ganz Kaernten",
         "sota": "!sota <ref> Gipfeldaten. !sota <lat lon> naechster Gipfel. !spot wer ist QRV",
@@ -594,11 +701,11 @@ class Bot:
 
     # Gruppen fuer die zweite Hilfestufe. Die Reihenfolge ist die der Uebersicht.
     GRUPPEN = {
-        "wetter": ["wx", "vorhersage", "warn", "lawine"],
-        "berg": ["sota", "az", "spot", "sonne", "mond"],
+        "wetter": ["wx", "gipfel", "vorhersage", "warn", "lawine"],
+        "berg": ["gipfel", "sota", "az", "spot", "sonne", "mond"],
         "standort": ["sicht", "hoehe", "dist", "qth"],
         "netz": ["netz", "wo", "relais", "ping", "quota"],
-        "sonst": ["dx", "iss", "zeit", "melde"],
+        "sonst": ["dx", "iss", "zeit", "melde", "version"],
     }
 
     def usage(self, cmd: str) -> str:
@@ -655,7 +762,9 @@ class Bot:
         jedem Befehl. Passt sie nicht mehr, faellt die Antwort automatisch auf
         die Gruppennamen zurueck, statt am Zeichenlimit abgeschnitten zu werden.
         """
-        alle = [c for gruppe in self.GRUPPEN.values() for c in gruppe]
+        # Ein Befehl darf in zwei Gruppen stehen -- !gipfel ist Wetter und Berg.
+        # In der flachen Liste waere er dann doppelt, und die Zaehlung falsch.
+        alle = list(dict.fromkeys(c for gruppe in self.GRUPPEN.values() for c in gruppe))
         grenze = self.settings.nutzlimit
         # Von der schoensten zur kuerzesten Form, erste die passt gewinnt.
         #

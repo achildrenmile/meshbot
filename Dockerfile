@@ -21,8 +21,13 @@ RUN useradd --system --uid 10001 meshbot \
 USER meshbot
 EXPOSE 8080
 
-# Prueft absichtlich nur den eigenen Prozess und die MQTT-Verbindung.
-# Eine Stoerung bei GeoSphere ist kein Grund fuer einen Neustart.
+# Deliberately checks only our own process and the MQTT connection. A GeoSphere
+# outage is no reason for a restart.
+#
+# /healthz answers 503 once the broker has been unreachable for longer than the
+# grace period. urlopen raises HTTPError on that, Python exits non-zero, and
+# Docker reads that as unhealthy -- which is exactly what should happen. No
+# try/except needed: the traceback in the health-check output names the status.
 HEALTHCHECK --interval=60s --timeout=5s --start-period=15s --retries=3 \
     CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/healthz',timeout=3).status==200 else 1)"
 

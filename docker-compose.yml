@@ -17,6 +17,19 @@ services:
     volumes:
       # Meldungen aus dem Funknetz muessen einen Neustart ueberleben.
       - meldungen:/data
+    # Der Watchdog im meshcore-Stack auf demselben Host greift ueber diese
+    # Labels. Er ist die zweite Linie unter `restart: unless-stopped` -- am
+    # 28.8.2026 hat die erste nachweislich nicht gegriffen: Nach einem
+    # Stromausfall stand der Broker auf Exit 255 bei RestartCount 0, Docker
+    # hatte es also nicht ein einziges Mal versucht.
+    #
+    # `watchdog: true`       -> neu starten, wenn ungesund. Seit /healthz bei
+    #                           fehlender MQTT-Verbindung 503 liefert, heisst
+    #                           "ungesund" auch wirklich "antwortet nicht mehr".
+    # `watchdog.start: true` -> ueberhaupt starten, wenn beendet.
+    labels:
+      meshinfra.watchdog: "true"
+      meshinfra.watchdog.start: "true"
     logging:
       driver: json-file
       options:

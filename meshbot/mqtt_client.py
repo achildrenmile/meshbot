@@ -7,6 +7,7 @@ incoming message travels back into the loop via `run_coroutine_threadsafe`.
 from __future__ import annotations
 
 import asyncio
+import time
 from typing import Any, Awaitable, Callable
 
 import paho.mqtt.client as mqtt
@@ -28,6 +29,11 @@ class MqttClient:
         self._on_quota = on_quota
         self._loop: asyncio.AbstractEventLoop | None = None
         self.connected = False
+        # Since when the connection has been gone, as a monotonic timestamp.
+        # `None` while connected. The health check needs the duration, not just
+        # the flag: a reconnect takes seconds, a dead broker takes hours, and
+        # only one of the two is worth reporting as unhealthy.
+        self.getrennt_seit: float | None = time.monotonic()
 
         self._client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,
                                    client_id=settings.mqtt_client_id, clean_session=True)
@@ -62,6 +68,7 @@ class MqttClient:
             log.error("mqtt_abgelehnt", rc=str(rc))
             return
         self.connected = True
+        self.getrennt_seit = None
         client.subscribe(self.settings.topic_rx, qos=0)
         client.subscribe(self.settings.topic_admin, qos=1)
         if self._on_quota is not None:
@@ -70,6 +77,11 @@ class MqttClient:
 
     def _handle_disconnect(self, client: Any, userdata: Any, flags: Any, rc: Any, properties: Any = None) -> None:
         self.connected = False
+        # Only on the first disconnect: paho may report repeatedly while
+        # retrying, and each report would otherwise reset the clock and keep
+        # the outage permanently below the grace period.
+        if self.getrennt_seit is None:
+            self.getrennt_seit = time.monotonic()
         log.warning("mqtt_getrennt", rc=str(rc))
 
     def _handle_message(self, client: Any, userdata: Any, msg: mqtt.MQTTMessage) -> None:

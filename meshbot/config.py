@@ -125,6 +125,11 @@ class Settings(BaseSettings):
     topic_meldung: str = "meshinfra/bot/meldung"
 
     health_port: int = 8080
+    # How long the MQTT connection may be gone before the health check reports
+    # unhealthy. A reconnect takes seconds; two minutes distinguishes that from
+    # a broker that is actually down. Docker adds its own margin on top
+    # (interval 60s, retries 3).
+    health_mqtt_grace_s: float = 120.0
     log_level: str = "INFO"
 
     stations_file: Path = Field(default=DATA_DIR / "stations_ktn.json")

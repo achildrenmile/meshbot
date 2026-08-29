@@ -15,15 +15,20 @@ minor for a new command, patch for a fix.
 
 from __future__ import annotations
 
-VERSION = "1.5.0"
+VERSION = "1.6.0"
 
 # One line, fit for the radio network. No longer than necessary -- the prefix
 # "MeshBot <version>: " comes off the budget.
-KURZ = "!wx kennt Orte weltweit, !gipfel neu"
+KURZ = "!frag beantwortet freie Fragen, Antwort mit KI: markiert"
 
 # The recent releases, newest first. Serves conversational debugging ("you are
 # still on 1.4") and never goes on the air.
 VERLAUF = [
+    ("1.6.0", "2026-08-29", "!frag beantwortet freie Fragen ueber ein Sprachmodell "
+                            "auf rag-node-01; die Antwort traegt das Praefix KI:, weil "
+                            "sie als einzige im Bot nicht gemessen ist; eigene Bremsen "
+                            "(2 pro Absender/15min, 100/Tag) und ein eigener Notaus "
+                            "'frag off'; faellt der Dienst aus, schweigt der Befehl"),
     ("1.5.0", "2026-08-28", "!wx beantwortet Orte ausserhalb Kaerntens (Modell); "
                             "!gipfel getrennt von !wx; Wortgrenze statt Teilstring; "
                             "geratene Treffer bekommen ein Fragezeichen; Umlaute "

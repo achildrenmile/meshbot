@@ -124,6 +124,46 @@ class Settings(BaseSettings):
     meldungen_datei: Path = Field(default=Path("/data/meldungen.jsonl"))
     topic_meldung: str = "meshinfra/bot/meldung"
 
+    # --- !frag: language model, local ---
+    # Off by default. The first deployment must be able to change nothing, so
+    # that a failure afterwards can only come from the switch being flipped.
+    frag_enabled: bool = False
+    # rag-node-01. Same LAN, no tunnel, no authentication -- whoever reaches the
+    # port has the model, which is why it stays inside 192.168.1.0/24.
+    ollama_url: str = "http://192.168.1.32:30434/api/chat"
+    # Measured on rag-node-01 against the production system prompt, five
+    # questions each: gemma3:4b kept to the character budget five times out of
+    # five at ~1.5 s per answer, and deflected both fact questions to the
+    # measured commands instead of inventing a number. gemma2:2b managed three
+    # of five, llama3.2:3b one of three, llama3.1:8b ran at half the speed and
+    # still invented, and gpt-oss:20b is killed by the OOM killer there.
+    #
+    # qwen3:4b is unusable and worth naming: it ignores `think: false` and
+    # writes its reasoning into the answer as plain prose ("Okay, I need to
+    # answer the question..."), 320+ characters every time. There are no
+    # <think> tags, so DENKBLOCK in the handler cannot strip it either.
+    frag_model: str = "gemma3:4b"
+    # Its own timeout: http_timeout_s (5s) is sized for web APIs, and CPU
+    # inference of eighty tokens takes longer than that.
+    frag_timeout_s: float = 20.0
+    # Cost ceiling in both senses -- length of the answer and seconds of CPU.
+    frag_num_predict: int = 80
+    frag_frage_max: int = 160
+    # Brakes of its own, on top of the ones every command passes. An AI answer
+    # costs a multiple of a weather lookup, so it gets a stricter allowance.
+    frag_tageslimit: int = 100
+    frag_sender_limit: int = 2
+    frag_sender_window_s: int = 900
+    cache_ttl_frag_s: int = 3600
+    # How often to ask the inference host whether it is alive. Without this a
+    # dead Ollama is invisible: !frag simply stays silent, and silence looks
+    # exactly like "nobody asked". Five minutes is often enough to notice and
+    # rare enough to cost nothing -- the probe loads no model.
+    frag_probe_s: float = 300.0
+    # Marks the answer as coming from a model rather than from a measurement.
+    # Four characters off the budget, deliberately spent.
+    frag_praefix: str = "KI:"
+
     health_port: int = 8080
     # How long the MQTT connection may be gone before the health check reports
     # unhealthy. A reconnect takes seconds; two minutes distinguishes that from

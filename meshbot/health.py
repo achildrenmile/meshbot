@@ -47,6 +47,14 @@ def zustand(bot: Any, grace_s: float) -> tuple[bool, dict[str, Any]]:
     }
     if dauer is not None:
         body["mqtt_weg_s"] = int(dauer)
+    # Reported, never decisive. A dead inference host means !frag stays silent;
+    # every other command keeps working, so restarting the container would fix
+    # nothing and cost the uptime of everything that is still fine. The point is
+    # the same as with MQTT above -- make the outage *visible* -- but the right
+    # consequence is different, so it stays out of `ok`.
+    body["frag"] = {None: "aus", True: "ok", False: "weg"}[
+        getattr(bot, "frag_erreichbar", None) if getattr(bot, "frag_enabled", False) else None
+    ]
     return ok, body
 
 

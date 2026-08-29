@@ -15,6 +15,7 @@ from cachetools import TTLCache
 from .config import Settings, load_settings
 from .handlers import az as h_az
 from .handlers import dx as h_dx
+from .handlers import frag as h_frag
 from .handlers import geo as h_geo
 from .handlers import ortsuche as h_ort
 from .handlers import iss as h_iss
@@ -35,6 +36,7 @@ from .handlers import wx as h_wx
 from .handlers import wxberg as h_berg
 from .health import serve_health
 from .mqtt_client import MqttClient
+from .ratelimit import SenderLimiter, TokenBucket
 from .router import ALIASES, Router
 from .version import VERSION
 from . import version as v_mod
@@ -69,6 +71,25 @@ class Bot:
         self.cache_geo: TTLCache = TTLCache(maxsize=256, ttl=settings.cache_ttl_geo_s)
         # Zone polygons only change when SOTLAS recomputes them.
         self.cache_az: TTLCache = TTLCache(maxsize=64, ttl=settings.cache_ttl_az_s)
+        # Keyed on the normalised question. On a channel the same thing gets
+        # asked repeatedly, and a cached answer costs neither CPU on rag-node-01
+        # nor a slot in the daily allowance.
+        self.cache_frag: TTLCache = TTLCache(maxsize=128, ttl=settings.cache_ttl_frag_s)
+        # Brakes of !frag's own, on top of the ones in the router that every
+        # command passes. Reason for the second set: a weather lookup is one HTTP
+        # request, an AI answer is seconds of CPU on a machine that also runs
+        # k3s. The same allowance for both would be the wrong trade.
+        self.frag_sender = SenderLimiter(settings.frag_sender_limit,
+                                         settings.frag_sender_window_s)
+        # The daily ceiling. A token bucket rather than a counter, so it refills
+        # gradually instead of releasing a hundred grants at midnight.
+        self.frag_tag = TokenBucket(settings.frag_tageslimit, 86400)
+        self.frag_enabled = settings.frag_enabled
+        # None = not probed yet. Purely informational: it is reported on
+        # /healthz and logged on change, but it never makes the container
+        # unhealthy. A dead inference host is not a reason to restart the bot --
+        # every other command still works.
+        self.frag_erreichbar: bool | None = None
         self.stale: dict[str, Any] = {}          # letzte gute Antwort je Schlüssel
         self.router = Router(settings, {
             "wx": self.cmd_wx, "warn": self.cmd_warn, "sota": self.cmd_sota,
@@ -79,7 +100,7 @@ class Bot:
             "sicht": self.cmd_sicht, "hoehe": self.cmd_hoehe, "dist": self.cmd_dist,
             "dx": self.cmd_dx, "mond": self.cmd_mond, "iss": self.cmd_iss,
             "az": self.cmd_az, "quota": self.cmd_quota, "gipfel": self.cmd_gipfel,
-            "version": self.cmd_version,
+            "version": self.cmd_version, "frag": self.cmd_frag,
         })
         # The gate's last quota state. Arrives retained on subscribe.
         self.quota: dict[str, Any] | None = None
@@ -645,6 +666,56 @@ class Bot:
         ueberflug = await asyncio.to_thread(h_iss.naechster_ueberflug, tle, *koord, jetzt)
         return h_iss.render(ueberflug, self.settings.tz_offset_h, alt)
 
+    async def cmd_frag(self, arg: str, sender: str) -> str | None:
+        """A free question, answered by the model on rag-node-01.
+
+        Order of the gates is the point. The cache comes **before** the
+        allowances: a repeat of a question already answered costs neither CPU
+        nor a slot, so charging for it would only make the command feel broken.
+        Everything after that is paid for.
+
+        Every path out of here that is not an answer is silence -- there is no
+        "the AI is down" on the air. A refusal costs the same airtime as an
+        answer, and this bot spends that on !wx instead.
+        """
+        if not self.frag_enabled:
+            return None
+        frage = " ".join(arg.split())[: self.settings.frag_frage_max]
+        if not frage:
+            return self.usage("frag")
+
+        schluessel = frage.lower()
+        if schluessel in self.cache_frag:
+            return self.cache_frag[schluessel]
+
+        if not self.frag_sender.allow(sender):
+            log.info("frag_absenderlimit", sender=sender)
+            return None
+        if not self.frag_tag.allow():
+            log.info("frag_tageslimit", sender=sender)
+            return None
+
+        try:
+            roh = await h_frag.fetch(self.http, self.settings, frage)
+            antwort = h_frag.render(roh, self.settings.frag_praefix,
+                                    h_frag.budget(self.settings))
+        except Exception as exc:
+            log.warning("frag_fehler", sender=sender, frage=frage, error=str(exc))
+            return None
+
+        # Logged in full, unlike every other command. The router's line truncates
+        # the argument to 24 characters, which is right for `!wx villach` and
+        # wrong here: this went out over the operator's callsign, and afterwards
+        # somebody has to be able to say what was asked and what was answered.
+        #
+        # `modellantwort` is what came back, **before** the router clamps it --
+        # calling it "antwort" would be a lie, because on a long answer the two
+        # differ. What actually went on the air is logged by `on_message` under
+        # exactly that name; the pair of lines is the complete record.
+        log.info("frag", sender=sender, frage=frage, modellantwort=antwort)
+        self.cache_frag[schluessel] = antwort
+        return antwort
+
     # What a command needs when it is missing -- the shape and an example to
     # copy. The example is the more important half: someone typing `!sicht`
     # without arguments usually does not know what format two positions are
@@ -668,6 +739,7 @@ class Bot:
         "iss": "!iss [lat lon] - ohne Angabe der Standardort, sonst z.B. !iss 46.62 13.85",
         "help": "!help [befehl|thema] - z.B. !help sicht oder !help berg",
         "gipfel": "!gipfel <berg> - z.B. !gipfel dobratsch oder !gipfel triglav",
+        "frag": "!frag <frage> - z.B. !frag wie weit traegt 868 MHz",
     }
 
     HILFE = {
@@ -696,6 +768,7 @@ class Bot:
         "dx": "!dx Kurzwellenbedingungen: Sonnenfluss, A- und K-Index",
         "mond": "!mond [ort|lat lon] Auf-, Untergang und Phase",
         "iss": "!iss [lat lon] naechster Ueberflug der Raumstation ueber 10 Grad",
+        "frag": "!frag <frage> KI antwortet, Praefix KI:. Kann irren, ist keine Messung",
     }
 
     # Groups for the second help stage. The order matches the overview.
@@ -704,8 +777,26 @@ class Bot:
         "berg": ["gipfel", "sota", "az", "spot", "sonne", "mond"],
         "standort": ["sicht", "hoehe", "dist", "qth"],
         "netz": ["netz", "wo", "relais", "ping", "quota"],
-        "sonst": ["dx", "iss", "zeit", "melde", "version"],
+        "sonst": ["dx", "iss", "zeit", "melde", "frag", "version"],
     }
+
+    def gruppen(self) -> dict[str, list[str]]:
+        """The groups as the help should present them *right now*.
+
+        `!frag` is listed only while it is switched on. A listed but disabled
+        command is worse than an unlisted one: the bot answers unknown commands
+        with silence, so somebody who reads `!frag` in the overview and types it
+        gets nothing back and concludes the bot is broken. With `FRAG_ENABLED`
+        off -- which is how it ships and how the first deployment runs -- the
+        command simply does not exist as far as the help is concerned.
+
+        `getattr` because a couple of tests build a bare `Bot.__new__(Bot)` with
+        nothing but `settings` on it.
+        """
+        an = getattr(self, "frag_enabled", self.settings.frag_enabled)
+        if an:
+            return self.GRUPPEN
+        return {name: [c for c in cmds if c != "frag"] for name, cmds in self.GRUPPEN.items()}
 
     def usage(self, cmd: str) -> str:
         """What is missing, and what it looks like when present.
@@ -732,8 +823,9 @@ class Bot:
         thema = arg.strip().lstrip("!").lower()
         befehl = self.HILFE.get(thema)
         gruppe = None
-        if thema in self.GRUPPEN:
-            gruppe = f"{thema.title()}: " + " ".join("!" + c for c in self.GRUPPEN[thema])
+        gruppen = self.gruppen()
+        if thema in gruppen:
+            gruppe = f"{thema.title()}: " + " ".join("!" + c for c in gruppen[thema])
 
         if befehl and gruppe:
             # The command is already in the group listing -- naming it a second
@@ -761,7 +853,8 @@ class Bot:
         """
         # A command may appear in two groups -- !gipfel is weather and mountain.
         # In the flat list it would show up twice, and the count would be wrong.
-        alle = list(dict.fromkeys(c for gruppe in self.GRUPPEN.values() for c in gruppe))
+        gruppen = self.gruppen()
+        alle = list(dict.fromkeys(c for gruppe in gruppen.values() for c in gruppe))
         grenze = self.settings.nutzlimit
         # From the nicest to the shortest form; the first that fits wins.
         #
@@ -772,12 +865,12 @@ class Bot:
         for kandidat in (" ".join("!" + c for c in alle) + " | !help <cmd>",
                          " ".join(alle) + " !help <cmd>",
                          " ".join(alle),
-                         f"{len(alle)} Befehle in {len(self.GRUPPEN)} Gruppen: "
-                         + " ".join(self.GRUPPEN) + " | !help <thema>",
-                         "Themen: " + " ".join(self.GRUPPEN) + " | !help <thema>"):
+                         f"{len(alle)} Befehle in {len(gruppen)} Gruppen: "
+                         + " ".join(gruppen) + " | !help <thema>",
+                         "Themen: " + " ".join(gruppen) + " | !help <thema>"):
             if len(kandidat) <= grenze:
                 return kandidat
-        return "!help <thema>: " + " ".join(self.GRUPPEN)
+        return "!help <thema>: " + " ".join(gruppen)
 
     # --- Infrastructure --------------------------------------------------
 
@@ -792,6 +885,32 @@ class Bot:
                     await asyncio.sleep(0.5)
         raise letzter  # type: ignore[misc]
 
+    async def _frag_wache(self) -> None:
+        """Notice a dead inference host before somebody asks.
+
+        Without this the failure mode is invisible: `!frag` answers nothing, and
+        on the air that is indistinguishable from nobody having asked. The bot's
+        own health check deliberately covers only MQTT, so nothing else watches
+        this.
+
+        Only the **change** is logged, not every probe -- a host that has been
+        down for a day should produce one line, not 288.
+        """
+        while True:
+            if self.frag_enabled:
+                jetzt = await h_frag.erreichbar(self.http, self.settings)
+                if jetzt != self.frag_erreichbar:
+                    if jetzt:
+                        log.info("frag_erreichbar", url=h_frag.probe_url(self.settings))
+                    else:
+                        log.warning("frag_nicht_erreichbar",
+                                    url=h_frag.probe_url(self.settings),
+                                    hinweis="!frag schweigt, bis der Dienst zurueck ist")
+                    self.frag_erreichbar = jetzt
+            else:
+                self.frag_erreichbar = None
+            await asyncio.sleep(self.settings.frag_probe_s)
+
     async def on_message(self, raw: bytes) -> None:
         antwort = await self.router.handle(raw)
         if antwort is None:
@@ -804,6 +923,14 @@ class Bot:
         self.mqtt.publish(self.settings.topic_tx, payload)
 
     def on_admin(self, raw: bytes) -> None:
+        """Remote switches over MQTT.
+
+        `frag off` exists separately from `pause` on purpose: !frag is the one
+        command whose output nobody vetted before it went on the air. If it
+        misbehaves, the weather and the network status should keep working while
+        it is switched off -- pausing the whole bot to silence one command is
+        the wrong-sized hammer.
+        """
         befehl = raw.decode("utf-8", errors="replace").strip().lower()
         if befehl in ("pause", "stop", "off"):
             self.router.enabled = False
@@ -811,6 +938,12 @@ class Bot:
         elif befehl in ("resume", "start", "on"):
             self.router.enabled = True
             log.warning("bot_fortgesetzt")
+        elif befehl in ("frag off", "frag stop", "ki off"):
+            self.frag_enabled = False
+            log.warning("frag_aus")
+        elif befehl in ("frag on", "frag start", "ki on"):
+            self.frag_enabled = True
+            log.warning("frag_an")
 
     def on_quota(self, raw: bytes) -> None:
         """Record the gate's quota state. Runs in the paho thread.
@@ -835,6 +968,7 @@ class Bot:
             loop.add_signal_handler(sig, stop.set)
         self.mqtt.start(loop)
         health = asyncio.create_task(serve_health(self.settings, self))
+        wache = asyncio.create_task(self._frag_wache())
         log.info("gestartet", rx=self.settings.topic_rx, tx=self.settings.topic_tx,
                  enabled=self.router.enabled, relais=len(self.relais),
                  orte=len(self.stations.get("orte", {})),
@@ -842,6 +976,7 @@ class Bot:
                  gipfel=len(self.summits))
         await stop.wait()
         log.info("beende")
+        wache.cancel()
         health.cancel()
         self.mqtt.stop()
         await self.http.aclose()

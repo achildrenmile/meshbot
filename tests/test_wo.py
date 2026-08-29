@@ -163,11 +163,13 @@ def test_uebersicht_bleibt_brauchbar(grenze):
     bot = Bot.__new__(Bot)
     bot.settings = Settings(max_msg_len=grenze + 24)
     assert bot.settings.nutzlimit == grenze
-    alle = [c for gruppe in Bot.GRUPPEN.values() for c in gruppe]
+    # The bot's *effective* groups, not the class constant: !frag is listed only
+    # while it is switched on, and it ships switched off.
+    alle = [c for gruppe in bot.gruppen().values() for c in gruppe]
     text = bot._uebersicht()
     assert len(text) <= grenze
     # Either every command is listed, or every group -- never a stump.
-    vollstaendig = all(c in text for c in alle) or all(g in text for g in Bot.GRUPPEN)
+    vollstaendig = all(c in text for c in alle) or all(g in text for g in bot.gruppen())
     assert vollstaendig, text
 
 
@@ -181,8 +183,8 @@ def test_uebersicht_nennt_die_anzahl_wenn_die_liste_nicht_passt():
     # Compute the count from the groups instead of writing it down: otherwise
     # the test falls over on every new command without anything being broken.
     # Deduplicated, because !gipfel appears in two groups.
-    anzahl = len({c for g in Bot.GRUPPEN.values() for c in g})
-    assert text.startswith(f"{anzahl} Befehle in {len(Bot.GRUPPEN)} Gruppen:")
+    anzahl = len({c for g in bot.gruppen().values() for c in g})
+    assert text.startswith(f"{anzahl} Befehle in {len(bot.gruppen())} Gruppen:")
 
 
 def test_help_netz_liefert_gruppe_und_befehl():

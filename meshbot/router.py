@@ -59,6 +59,7 @@ ALIASES = {
     # already taken by !sota and stays there.
     "gipfel": "gipfel", "berg": "gipfel", "peak": "gipfel",
     "version": "version", "ver": "version", "stand": "version",
+    "frag": "frag", "frage": "frag", "ask": "frag", "ki": "frag",
 }
 
 

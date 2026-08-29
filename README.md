@@ -66,7 +66,8 @@ a trace. The bot's usable budget is `MAX_MSG_LEN - SENDER_RESERVE`.
 | `!zeit` | `!time`, `!utc` | `UTC 16.08.2026 17:11:53 (Epoch 1786900313)` |
 | `!quota` | `!kontingent`, `!rest` | `Kontingent: 44/50 pro 1h00 frei. Bot 12/12 pro 10min` |
 | `!ping` | | `MeshBot OK, up 3d4h, 42 cmds` |
-| `!version` | `!ver`, `!stand` | `MeshBot 1.5.0: !wx kennt Orte weltweit, !gipfel neu` |
+| `!frag <question>` | `!frage`, `!ask`, `!ki` | `KI: Ein Repeater verstärkt und weiterleitet Signale im Funknetz.` |
+| `!version` | `!ver`, `!stand` | `MeshBot 1.6.0: !frag beantwortet freie Fragen, Antwort mit KI: markiert` |
 | `!help [cmd\|group]` | `!hilfe` | Overview; with a command, the details |
 
 Without a place, `!wx` and `!relais` use the default location from the configuration.
@@ -312,6 +313,62 @@ masts are not in the model — `FREI` means "the terrain is not in the way", not
 link works". Antenna height is assumed to be 3 m at both ends. And the elevation model
 has a 25 m grid: a single sharp ridge can disappear between two grid points.
 
+## `!frag` — the one answer that is not measured
+
+Every other command returns something measured or computed: a station reading, an
+ephemeris, a polygon from SOTLAS. `!frag` returns what a language model believes,
+and a model can be confidently wrong. Three things follow, and none of them is
+decoration.
+
+**It does not do local facts.** Asked how high the Dobratsch is (2166 m), the
+models installed on `rag-node-01` answered 412, 711, 1047, 1586, 1743 and 2764 —
+six different wrong numbers, none of them hedged. So the system prompt steers the
+command away from heights, distances and coordinates: those the bot already
+answers from measurement via `!gipfel`, `!hoehe` and `!dist`, and a pointer to a
+measured command beats a confident invention. What is left is what the models are
+actually good at — explaining a term.
+
+**The answer is marked.** It goes out as `KI: …`, four characters off a
+hundred-character budget. On the channel a sentence from a model looks exactly like
+a sentence from a measuring station, and everything the bot sends carries the
+operator's callsign. The prefix is the only thing that tells the two apart.
+
+**Failure is silence.** Inference runs locally on `rag-node-01` (Ollama, `gemma3:4b`, CPU,
+about 1.5 s per answer). There is no cloud fallback and no API key — deliberately: the command costs
+nothing to run and is allowed to be unavailable. If the box is down, `!frag` says
+nothing at all and every other command keeps working.
+
+**It is on a shorter leash than anything else.** Two questions per sender per 15
+minutes and 100 per day, on top of the limits every command passes. A weather
+lookup is one HTTP request; an AI answer is seconds of CPU on a machine that also
+runs other services. Repeated questions are served from a cache for an hour and
+cost neither.
+
+The model is told to answer in one line within the character budget, and to say
+`weiss ich nicht` rather than invent. Neither instruction is a guarantee. What
+happens to an answer that is too long, in order:
+
+| | | |
+|---|---|---|
+| 1 | system prompt names the budget as a number | a request, not a rule |
+| 2 | `FRAG_NUM_PREDICT` caps the tokens generated | bounds **CPU time**, not characters — 80 tokens is roughly 280 characters |
+| 3 | whole sentences are dropped from the end | only if at least half the budget survives |
+| 4 | `clamp()` in the router cuts at a word boundary and appends `…` | the guarantee |
+
+Only step 4 guarantees anything, and what it guarantees is that the *packet* fits —
+not that the *answer* is complete. Step 3 exists so that a model answering in three
+sentences loses its last sentences rather than its last words: a short answer reads
+better than a broken one. A single long sentence has nothing to trim and falls
+through to step 4.
+
+The output is also stripped of markdown, control characters and backslashes before
+it can reach the JSON template that carries it to the bridge. Hyphens survive —
+`2-5 km` is legitimate German, so a markdown list arrives as `- Tal: 2-5 km` rather
+than being mangled.
+
+`FRAG_ENABLED` is `false` by default. Switching it on is a decision about what may
+be transmitted under your callsign, and it should be made deliberately.
+
 ## Data sources
 
 | Command | Source | Licence / note |
@@ -333,6 +390,7 @@ has a 25 m grid: a single sharp ridge can disappear between two grid points.
 | `!dx` | hamqsl.com (N0NBH) | solar and propagation data |
 | `!iss` | orbital data from Celestrak, SGP4 | TLE cached 6 h, then marked `~` |
 | `!sonne`, `!mond`, `!zeit`, `!dist`, `!qth` | computed, no source | works offline |
+| `!frag` | language model on rag-node-01 (Ollama, LAN) | **not measured** — marked `KI:`, cached 1 h |
 
 Caches: weather 10 min, warnings 5 min, SOTA and repeaters 24 h, terrain and place
 lookups a week. If a source fails, the last known value is returned prefixed with `~`
@@ -365,6 +423,17 @@ mosquitto_pub -h <broker> -t meshinfra/bot/admin -m resume
 
 or `BOT_ENABLED=false` in `.env` followed by `docker compose up -d`.
 
+`!frag` has a switch of its own, because it is the one command whose output nobody
+vetted before it went on the air. Silencing it should not take the weather down
+with it:
+
+```bash
+mosquitto_pub -h <broker> -t meshinfra/bot/admin -m "frag off"
+mosquitto_pub -h <broker> -t meshinfra/bot/admin -m "frag on"
+```
+
+or `FRAG_ENABLED=false` in `.env` for the permanent version.
+
 ## Configuration
 
 All values come from environment variables, see `.env.example`. The important ones:
@@ -380,6 +449,11 @@ All values come from environment variables, see `.env.example`. The important on
 | `TRANSLITERATE` | rewrite umlauts as `ae/oe/ue`; **off** since 2026-08-28 |
 | `GLOBAL_LIMIT` / `SENDER_LIMIT` | airtime brakes |
 | `BOT_NAME` | own name, used for loop protection |
+| `FRAG_ENABLED` | `!frag` on or off, **default off** |
+| `OLLAMA_URL` | inference endpoint, default `http://192.168.1.32:11434/api/chat` |
+| `FRAG_MODEL` | model name as Ollama knows it |
+| `FRAG_NUM_PREDICT` | token ceiling per answer — the real cost limit, default 80 |
+| `FRAG_SENDER_LIMIT` / `FRAG_TAGESLIMIT` | `!frag`'s own brakes, default 2 per 15 min and 100 per day |
 
 ## Deployment
 

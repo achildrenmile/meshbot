@@ -138,6 +138,38 @@ def test_antwort_nur_aus_muell_wirft():
         h_frag.render("**__``**", "KI:")
 
 
+def test_fachbegriffe_stehen_als_beispiel_im_systemprompt(settings):
+    """The glossary is the one part of the prompt that measurably rescued answers.
+
+    Without it, `!frag was bedeutet SF5/SF8` went on the air as "Signal-Kraft-Faktor,
+    hoeher ist besser" -- SF is the Spreading Factor, and higher is not better but
+    slower. In front of an audience of radio amateurs, under the operator's callsign.
+
+    As prose the same terms were ignored; only as question-and-answer pairs did the
+    model reproduce them. So this checks the *form* too: whoever shortens the prompt
+    later should see this test fail before the network does.
+    """
+    p = h_frag.systemprompt(h_frag.budget(settings))
+    for begriff in ("Spreading Factor", "Signal-Rausch-Abstand", "Empfangspegel",
+                    "Sendezeitanteil"):
+        assert begriff in p, f"{begriff} fehlt im Systemprompt"
+    assert p.count("Frage:") >= 6, "zu wenige Beispiele -- Regeln allein wirken nicht"
+
+
+def test_verweisbeispiele_nennen_verschiedene_befehle(settings):
+    """One command in the examples turns into that command for everything.
+
+    With `!gipfel` as the only pointer, "wie ist der verkehr im netz" came back as
+    `Frag !gipfel verkehr`. With a list of allowed commands in prose instead, the
+    model answered `Frag !netz, das erklaert Signal-Rausch-Abstand` to *what is SNR*.
+    Two examples with two different commands is what actually worked.
+    """
+    p = h_frag.systemprompt(h_frag.budget(settings))
+    assert "!netz" in p and "!gipfel" in p
+    # Antworten muessen ueberwiegen, sonst wird Verweisen zum Standardverhalten.
+    assert p.count("Frage:") - p.count("Antwort: Frag !") >= 4
+
+
 def test_zeichengrenze_steht_als_zahl_im_systemprompt(settings):
     """A model treats "kurz" as a suggestion and a number as a rule."""
     # 100 usable minus "KI:" and the space after it.

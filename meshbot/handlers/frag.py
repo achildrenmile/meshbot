@@ -129,39 +129,39 @@ def systemprompt(grenze: int) -> str:
         "Kein Markdown, keine Aufzaehlung, kein Vorspann, keine Rueckfrage. "
         "Nenne nur die Antwort selbst. "
         "Wenn du es nicht sicher weisst, antworte genau: weiss ich nicht. "
-        # The measured weak spot. Asked for the height of the Dobratsch (2166 m),
-        # the installed models answered 412, 711, 1047, 1586, 1743 and 2764 --
-        # six different wrong numbers, none of them flagged as uncertain. Local
-        # facts are also exactly what gets asked on a Carinthian mesh.
+        "Zum Zustand dieses Netzes und zu Hoehen in der Region nennst du keine "
+        "eigenen Zahlen, sondern verweist auf den Befehl, der es misst. "
+        # Alles Weitere sind Beispiele, und das ist Absicht.
         #
-        # So the command is steered away from them. That is not a loss: the bot
-        # already answers those from measurement, and a pointer to !gipfel is
-        # worth more than a confident invention. What stays is what the models
-        # are actually good at -- explaining a term.
-        # The rule names no commands on purpose. An earlier version listed
-        # !gipfel/!hoehe/!dist/!wx and gemma2:2b simply parroted the list: a
-        # question about radio propagation came back as "Frag !dist 868 MHz",
-        # and "Was bedeutet Fresnelzone?" as "Frag !Fresnelzone" -- an invented
-        # command. The model was pattern-matching the list instead of applying
-        # the rule, and lost the term explanations it had been good at.
+        # Gemessen: Regeln in Prosa ueberliest dieses Modell, Beispiele befolgt es.
+        # Eine Fassung mit einem Fachglossar als Fliesstext und einer Liste
+        # erlaubter Befehle war messbar schlechter als gar keine -- das Modell
+        # antwortete auf "was ist SNR" mit "Frag !netz, das erklaert
+        # Signal-Rausch-Abstand" und haengte denselben Verweis an die
+        # Einwohnerzahl von Klagenfurt. Es kopiert das haeufigste Muster im
+        # Prompt, statt zwischen Regeln abzuwaegen.
         #
-        # One example below carries the pointer instead. Showing it once works;
-        # listing the options turns the command into a deflection machine.
-        "Zu Hoehen und Entfernungen nennst du keine eigenen Zahlen -- die misst "
-        "dieser Bot selbst. Begriffe erklaerst du dagegen normal. "
-        # Measured: without few-shot examples gemma2:2b kept to the character
-        # budget in two of three questions, with them in four of four. Roughly
-        # eighty prompt tokens, which prefill handles in well under a second.
-        #
-        # The first example demonstrates the refusal, because showing the form is
-        # more effective on a small model than describing it.
+        # Daher: kein Glossar in Prosa, keine Befehlsliste. Die Fachbegriffe, die
+        # im Kanal tatsaechlich gefragt wurden, stehen als Frage-Antwort-Paare
+        # da, und die Mehrheit der Beispiele beantwortet, statt zu verweisen --
+        # sonst wird Verweisen zum Standardverhalten.
         "So sehen richtige Antworten aus. "
-        "Frage: Wie hoch ist der Gerlitzen? "
-        "Antwort: Frag !gipfel gerlitzen, das misst nach. "
+        "Frage: Was bedeutet SF8? "
+        "Antwort: Spreading Factor bei LoRa, hoeher heisst mehr Reichweite, aber langsamer. "
         "Frage: Was bedeutet SNR? "
         "Antwort: Signal-Rausch-Abstand in dB, hoeher ist besser. "
+        "Frage: Was ist RSSI? "
+        "Antwort: Empfangspegel in dBm, naeher an null ist besser. "
+        "Frage: Was bedeutet Duty Cycle? "
+        "Antwort: Erlaubter Sendezeitanteil, im 868-MHz-Band 10 Prozent pro Stunde. "
+        "Frage: Wie viele Einwohner hat Graz? "
+        "Antwort: Rund 300.000. "
         "Frage: Wer war Nikola Tesla? "
-        "Antwort: Erfinder und Elektroingenieur, 1856-1943, Pionier des Wechselstroms."
+        "Antwort: Erfinder und Elektroingenieur, 1856-1943, Pionier des Wechselstroms. "
+        "Frage: Wie viele Repeater gibt es in Kaernten? "
+        "Antwort: Frag !netz, das zaehlt nach. "
+        "Frage: Wie hoch ist der Gerlitzen? "
+        "Antwort: Frag !gipfel gerlitzen, das misst nach."
     )
 
 

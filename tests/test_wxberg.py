@@ -213,3 +213,39 @@ def test_gipfelantwort_bleibt_unter_60_zeichen(frage):
 def test_kein_luftdruck_in_der_gipfelantwort():
     g = h_berg.suche(IDX, "triglav")
     assert "hPa" not in h_berg.render(g, {**WERTE, "pressure_msl": 1013.0})
+
+
+# --- Hoehe im Messzweig ----------------------------------------------------
+
+from meshbot.handlers import wx as h_wx  # noqa: E402
+
+
+def test_gipfel_mit_station_behaelt_die_hoehe():
+    """`!gipfel` darf die Hoehe nicht dort verlieren, wo die Antwort am besten ist.
+
+    Steht eine Station praktisch am Gipfel -- hoechstens 3 km entfernt und 300 m
+    Hoehenunterschied -- gewinnt die Messung ueber das Modell. Richtig so.
+    Gerendert wurde sie aber ueber den Ortsrenderer, und der kennt keine Hoehe.
+
+    Ergebnis: `!gipfel gerlitzen` antwortete `WX Gerlitzen 1909m: …` aus dem
+    Modell, `!gipfel dobratsch` dagegen `WX Dobratsch (Villacher Alpe): …` aus
+    der Messung. Derselbe Befehl, zwei Formen -- und die Hoehe fehlte
+    ausgerechnet dort, wo die Antwort am meisten wert war. Sie ist das Einzige,
+    was !gipfel von !wx unterscheidet.
+    """
+    werte = {"TL": 12.5, "RF": 84, "FFAM": 3.3, "DD": 90, "P": 790}
+    mit = h_wx.render("Dobratsch", werte, station="Villacher Alpe", hoehe=2166)
+    assert mit.startswith("WX Dobratsch 2166m (Villacher Alpe): ")
+
+
+def test_orte_bekommen_keine_hoehe():
+    """Ein Ort hat keine einzelne Hoehe, die zu nennen sich lohnt."""
+    werte = {"TL": 12.5, "RF": 84}
+    assert h_wx.render("Villach", werte).startswith("WX Villach: ")
+
+
+def test_gipfel_mit_hoehe_bleibt_im_zeichenlimit():
+    """Sechs Zeichen mehr duerfen die Antwort nicht ueber die Grenze schieben."""
+    werte = {"TL": -12.5, "RF": 100, "FFAM": 27.8, "DD": 315, "P": 1013}
+    lang = h_wx.render("Hochalmspitze", werte, station="Sonnblick", hoehe=3360)
+    assert len(lang) <= 100, f"{len(lang)}: {lang}"

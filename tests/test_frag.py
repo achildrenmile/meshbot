@@ -349,6 +349,43 @@ def test_netzfrage_wird_ausgefuehrt_statt_verwiesen(settings):
     assert not a.startswith("KI:")
 
 
+def test_netz_wird_nur_bei_mengenfragen_ausgefuehrt(settings):
+    """!netz liefert Summen und beantwortet keine Aufzaehlung.
+
+    Gemessen: auf "welche Repeater stehen auf dem Dobratsch" verwies das Modell
+    ebenfalls auf !netz -- und ein Gegenbeispiel im Systemprompt hat daran nichts
+    geaendert. Ausgefuehrt kaeme die allgemeine Netzstatistik zurueck, die
+    aussieht, als beantworte sie die Frage. Der Verweis ist ehrlicher: den
+    erkennt der Fragende selbst als unpassend.
+    """
+    b = Bot(settings)
+    b.http = antwortet("Frag !netz, das zaehlt nach.")
+
+    async def netz(arg, sender):
+        return "Netz KTN: 29/33 aktiv"
+
+    b.router.handlers["netz"] = netz
+
+    # Mengenfrage: ausgefuehrt.
+    assert run(b.cmd_frag("wie viele repeater gibt es", "OE8A")) == "Netz KTN: 29/33 aktiv"
+    # Aufzaehlungsfrage: Verweis bleibt stehen.
+    assert run(b.cmd_frag("welche repeater stehen auf dem dobratsch", "OE8B")) \
+        == "KI: Frag !netz, das zaehlt nach."
+
+
+def test_gipfel_braucht_diese_pruefung_nicht(settings):
+    """!gipfel traegt sein Argument mit sich und kann die Frage nicht verfehlen."""
+    b = Bot(settings)
+    b.http = antwortet("Frag !gipfel gerlitzen, das misst nach.")
+
+    async def gipfel(arg, sender):
+        return "WX Gerlitzen 1909m: 13.7C"
+
+    b.router.handlers["gipfel"] = gipfel
+    # Kein Mengenwort in der Frage, trotzdem ausgefuehrt.
+    assert run(b.cmd_frag("welche hoehe hat der gerlitzen", "OE8C")) == "WX Gerlitzen 1909m: 13.7C"
+
+
 def test_bergfrage_reicht_das_argument_durch(settings):
     gesehen = []
     b = Bot(settings)
@@ -405,6 +442,97 @@ def test_ausgefuehrtes_wird_nicht_zwischengespeichert(settings):
     b.router.handlers["netz"] = netz
     run(b.cmd_frag("wie viele repeater", "OE8TEST"))
     assert "wie viele repeater" not in b.cache_frag
+
+
+# --- Wikipedia als Rueckfall -----------------------------------------------
+
+
+def test_titel_ohne_bezug_zur_frage_wird_verworfen():
+    """Die Volltextsuche irrt sich ohne jedes Zeichen von Unsicherheit.
+
+    Gemessen: die Suche nach "Spreading Factor LoRa" ergab **Rheumatoide
+    Arthritis** und **Elon Musk**. Einen solchen Treffer zu funken waere
+    schlimmer als das "weiss ich nicht", das er ersetzen soll.
+    """
+    assert not h_frag.passt_zur_frage("was bedeutet spreading factor", "Rheumatoide Arthritis")
+    assert not h_frag.passt_zur_frage("was bedeutet spreading factor", "Elon Musk")
+    assert h_frag.passt_zur_frage("wie viele einwohner hat klagenfurt", "Klagenfurt am Wörthersee")
+    assert h_frag.passt_zur_frage("was ist lora", "LoRa (Übertragungsverfahren)")
+
+
+def test_fuellwoerter_zaehlen_nicht_als_bezug():
+    """Sonst passt "was ist das Ding" zu jedem Artikel mit "das" im Titel."""
+    assert not h_frag.passt_zur_frage("welche farbe hat der himmel", "Die Ärzte")
+
+
+def test_weiss_nicht_wird_erkannt():
+    assert h_frag.weiss_nicht("KI: weiss ich nicht")
+    assert h_frag.weiss_nicht("KI: Weiß ich nicht.")
+    assert not h_frag.weiss_nicht("KI: Rund 300.000.")
+
+
+def test_nachschlagen_liefert_den_ersten_satz(settings):
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "api.php" in str(request.url):
+            return httpx.Response(200, json={"query": {"search": [{"title": "Klagenfurt am Wörthersee"}]}})
+        return httpx.Response(200, json={"extract": "Klagenfurt am Wörthersee ist eine Großstadt "
+                                                    "im Süden Österreichs. Sie hat rund 105.000 Einwohner."})
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    assert run(h_frag.nachschlagen(client, settings, "wie viele einwohner hat klagenfurt")) \
+        == "Klagenfurt am Wörthersee ist eine Großstadt im Süden Österreichs."
+
+
+def test_begriffsklaerung_ist_keine_antwort(settings):
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "api.php" in str(request.url):
+            return httpx.Response(200, json={"query": {"search": [{"title": "Lora"}]}})
+        return httpx.Response(200, json={"type": "disambiguation", "extract": "Lora steht für:"})
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    assert run(h_frag.nachschlagen(client, settings, "was ist lora")) is None
+
+
+def test_nachschlagen_wirft_nie(settings):
+    def kaputt(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("kein Netz")
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(kaputt))
+    assert run(h_frag.nachschlagen(client, settings, "irgendwas")) is None
+
+
+def test_rueckfall_greift_nur_bei_weiss_ich_nicht(settings):
+    """Eine echte Modellantwort darf nicht durch einen Artikel ersetzt werden."""
+    gesehen = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        u = str(request.url)
+        if "/api/chat" in u:
+            return httpx.Response(200, json={"message": {"content": "LoRa ist eine Funktechnologie."}})
+        gesehen.append(u)
+        return httpx.Response(200, json={"query": {"search": []}})
+
+    b = Bot(settings)
+    b.http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    assert run(b.cmd_frag("was ist lora", "OE8TEST")) == "KI: LoRa ist eine Funktechnologie."
+    assert gesehen == [], "Wikipedia darf gar nicht gefragt worden sein"
+
+
+def test_rueckfall_traegt_eigenes_praefix(settings):
+    def handler(request: httpx.Request) -> httpx.Response:
+        u = str(request.url)
+        if "/api/chat" in u:
+            return httpx.Response(200, json={"message": {"content": "weiss ich nicht"}})
+        if "api.php" in u:
+            return httpx.Response(200, json={"query": {"search": [{"title": "Klagenfurt"}]}})
+        return httpx.Response(200, json={"extract": "Klagenfurt ist eine Großstadt in Kärnten."})
+
+    b = Bot(settings)
+    b.http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    a = run(b.cmd_frag("wie viele einwohner hat klagenfurt", "OE8TEST"))
+    assert a == "WP: Klagenfurt ist eine Großstadt in Kärnten."
+    # KI: waere hier gelogen -- das hat niemand geraten.
+    assert not a.startswith("KI:")
 
 
 # --- watchdog for the inference host ---------------------------------------

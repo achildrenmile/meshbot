@@ -29,6 +29,8 @@ import re
 
 import httpx
 
+from ..formatting import transliterate
+
 # Markdown, control characters and the backslash. The backslash is the dangerous
 # one: it survives the quote replacement in on_message and breaks the JSON
 # template. The rest is cosmetic -- asterisks and backticks are noise on a
@@ -86,6 +88,97 @@ def verweis(text: str) -> tuple[str, str] | None:
 # two cases: in "z.B." the dot is preceded by a letter that itself follows a dot
 # or a space; in "Sicht." it is preceded by a letter that follows another letter.
 SATZENDE = re.compile(r"(?<![.\s][A-Za-zÄÖÜäöü])[.!?](?=\s|$)")
+
+
+# Sagt das Modell selbst, dass es passt? Dann lohnt ein Nachschlagen.
+WEISS_NICHT = re.compile(r"wei(ss|ß) ich nicht", re.IGNORECASE)
+
+# Woerter, die fuer den Abgleich Frage <-> Artikeltitel nichts hergeben.
+FUELLWOERTER = frozenset((
+    "was", "wer", "wie", "wo", "welche", "welcher", "welches", "wieviel",
+    "viele", "viel", "ist", "sind", "war", "hat", "haben", "der", "die", "das",
+    "ein", "eine", "einen", "und", "oder", "bei", "von", "vom", "fuer", "für",
+    "bedeutet", "heisst", "heißt", "gibt", "steht", "stehen", "genau",
+))
+
+
+def weiss_nicht(text: str) -> bool:
+    return WEISS_NICHT.search(text) is not None
+
+
+def _woerter(text: str) -> set[str]:
+    # Umlaute vereinheitlichen, sonst findet "woerthersee" den "Woerthersee"
+    # nicht. Genau dieser Fall ist im Betrieb aufgetreten: der Artikel war da,
+    # die Pruefung liess ihn durchfallen. Der Rest des Bots normalisiert
+    # ebenso -- siehe die umlautfreie Ortssuche.
+    roh = re.findall(r"[\wäöüß]+", transliterate(text.lower()))
+    return {w for w in roh if len(w) >= 4 and w not in FUELLWOERTER}
+
+
+def passt_zur_frage(frage: str, titel: str) -> bool:
+    """Teilen Frage und gefundener Artikel ueberhaupt ein Wort?
+
+    Die Volltextsuche der Wikipedia liefert bei Fachbegriffen Unsinn, und zwar
+    ohne jedes Zeichen von Unsicherheit: die Suche nach "Spreading Factor LoRa"
+    ergab **Rheumatoide Arthritis** und **Elon Musk**. Einen solchen Treffer
+    ungeprueft zu funken waere schlimmer als das ehrliche "weiss ich nicht",
+    das er ersetzen soll.
+
+    Ein gemeinsames Wort ist eine grobe Huerde, aber eine deterministische --
+    und sie haette beide Fehlgriffe gestoppt, waehrend sie "Einwohner
+    Klagenfurt" gegen "Klagenfurt am Woerthersee" durchlaesst.
+    """
+    return bool(_woerter(frage) & _woerter(titel))
+
+
+async def nachschlagen(client: httpx.AsyncClient, settings, frage: str,
+                       grenze: int | None = None) -> str | None:
+    """Erster Satz des passendsten Wikipedia-Artikels, oder nichts.
+
+    Bewusst **ohne** zweiten Modelldurchlauf: der Text wird nicht
+    zusammengefasst, sondern abgeschnitten. Eine Zusammenfassung durch dasselbe
+    4B-Modell brächte genau das zurück, was hier vermieden werden soll -- nur
+    diesmal mit einer Quelle daneben, die es glaubwuerdig aussehen laesst.
+
+    Wirft nie. Jeder Fehler bedeutet: es bleibt beim "weiss ich nicht".
+    """
+    try:
+        resp = await client.get(
+            settings.wikipedia_such_url,
+            params={"action": "query", "format": "json", "list": "search",
+                    "srlimit": 1, "srsearch": frage},
+            timeout=settings.wikipedia_timeout_s,
+        )
+        resp.raise_for_status()
+        treffer = resp.json().get("query", {}).get("search", [])
+        if not treffer:
+            return None
+        titel = treffer[0]["title"]
+        if not passt_zur_frage(frage, titel):
+            return None
+
+        resp = await client.get(
+            settings.wikipedia_auszug_url.format(titel=titel.replace(" ", "_")),
+            timeout=settings.wikipedia_timeout_s,
+        )
+        resp.raise_for_status()
+        daten = resp.json()
+    except Exception:
+        return None
+
+    # Eine Begriffsklaerung ist keine Antwort, sondern eine Rueckfrage.
+    if daten.get("type") == "disambiguation":
+        return None
+    auszug = " ".join(str(daten.get("extract", "")).split())
+    if not auszug:
+        return None
+    m = SATZENDE.search(auszug)
+    satz = auszug[: m.end()] if m else auszug
+    # Der erste Satz eines Artikels ist oft laenger als eine Funknachricht:
+    # "Klagenfurt am Woerthersee ist eine Grossstadt im Sueden Oesterreichs
+    # sowie die Landeshauptstadt ..." sind 145 Zeichen. Ohne Kuerzung hier
+    # schneidet clamp() ihn spaeter mitten durch.
+    return kuerzen_am_satzende(satz, grenze) if grenze is not None else satz
 
 
 def budget(settings) -> int:
@@ -185,6 +278,15 @@ def systemprompt(grenze: int) -> str:
         "Antwort: Frag !netz, das zaehlt nach. "
         "Frage: Wie hoch ist der Gerlitzen? "
         "Antwort: Frag !gipfel gerlitzen, das misst nach."
+        # Hier stand ein Gegenbeispiel ("Welche Repeater stehen auf dem
+        # Dobratsch? -- weiss ich nicht"), das den Fehlgriff auf !netz
+        # verhindern sollte. Gemessen: wirkungslos, das Modell verwies weiter
+        # auf !netz. Wieder entfernt, weil jedes Beispiel Prefill-Zeit bei
+        # jeder einzelnen Anfrage kostet.
+        #
+        # Diese Unterscheidung -- "wie viele" gegen "welche" -- liegt jetzt im
+        # Code, siehe `Bot._frag_ausfuehren`. Was sich deterministisch pruefen
+        # laesst, gehoert nicht in einen Prompt.
     )
 
 

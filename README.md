@@ -338,6 +338,19 @@ about 4 s per answer). There is no cloud fallback and no API key — deliberatel
 nothing to run and is allowed to be unavailable. If the box is down, `!frag` says
 nothing at all and every other command keeps working.
 
+**When the model knows nothing, the bot looks it up.** If the answer is
+`weiss ich nicht`, it queries the German Wikipedia and sends the first sentence of
+the best-matching article, prefixed `WP:` rather than `KI:` — a different source,
+and `KI:` would be a lie there. The text is **truncated, not summarised**: running
+it through the same model would bring the guessing back, only with a source next
+to it making it look credible.
+
+Two limits. It answers *what is X*, not every question about X — `wie viele
+einwohner hat klagenfurt` returns the city's definition, not the number. And a hit
+has to match the question: searching for "Spreading Factor LoRa" returned
+*Rheumatoide Arthritis* and *Elon Musk*, with no sign of uncertainty, so any
+article whose title shares no word with the question is discarded.
+
 **It is on a shorter leash than anything else.** Two questions per sender per 15
 minutes and 100 per day, on top of the limits every command passes. A weather
 lookup is one HTTP request; an AI answer is seconds of CPU on a machine that also
@@ -390,7 +403,8 @@ be transmitted under your callsign, and it should be made deliberately.
 | `!dx` | hamqsl.com (N0NBH) | solar and propagation data |
 | `!iss` | orbital data from Celestrak, SGP4 | TLE cached 6 h, then marked `~` |
 | `!sonne`, `!mond`, `!zeit`, `!dist`, `!qth` | computed, no source | works offline |
-| `!frag` | language model on rag-node-01 (Ollama, LAN) | **not measured** — marked `KI:`, cached 1 h |
+| `!frag` | language model, self-hosted | **not measured** — marked `KI:`, cached 1 h |
+| `!frag` fallback | German Wikipedia, first sentence | marked `WP:`, only when the model says it does not know |
 
 Caches: weather 10 min, warnings 5 min, SOTA and repeaters 24 h, terrain and place
 lookups a week. If a source fails, the last known value is returned prefixed with `~`

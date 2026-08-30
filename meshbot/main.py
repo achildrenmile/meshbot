@@ -713,8 +713,58 @@ class Bot:
         # differ. What actually went on the air is logged by `on_message` under
         # exactly that name; the pair of lines is the complete record.
         log.info("frag", sender=sender, frage=frage, modellantwort=antwort)
+
+        echt = await self._frag_ausfuehren(antwort, sender)
+        if echt is not None:
+            # Bewusst **nicht** zwischengespeichert: das ist ein Messwert, und
+            # der ist in einer Stunde ein anderer. Gecacht wird nur, was das
+            # Modell aus sich heraus gesagt hat.
+            return echt
+
         self.cache_frag[schluessel] = antwort
         return antwort
+
+    # Befehle, deren Argument in Klartext ankommen darf. !dist und !hoehe
+    # fehlen mit Absicht: die wollen Koordinaten, und "!dist villach
+    # klagenfurt" liefert nur die Verwendungszeile -- schlechter als der
+    # Verweis, den das Modell ohnehin geschrieben hat.
+    FRAG_AUSFUEHRBAR = {"netz", "gipfel", "wx"}
+
+    async def _frag_ausfuehren(self, antwort: str, sender: str) -> str | None:
+        """Nennt die Modellantwort einen Befehl, fuehre ihn aus.
+
+        Das Modell weiss, welches Werkzeug gefragt waere -- es schreibt "Frag
+        !netz, das zaehlt nach" -- kann es aber nicht bedienen. Der Bot kann.
+        Statt den Fragenden auf eine zweite Nachricht zu schicken, kommt die
+        gemessene Antwort gleich zurueck.
+
+        Und zwar **ohne** das KI:-Praefix: was hier hinausgeht, hat eine
+        Messstation oder die Karte geliefert, nicht das Modell. Das Praefix
+        trennt Geratenes von Gemessenem, und hier ist nichts geraten.
+
+        Jeder Zweifelsfall faellt auf die Modellantwort zurueck, nie ins Leere.
+        """
+        ziel = h_frag.verweis(antwort)
+        if ziel is None:
+            return None
+        getippt, argument = ziel
+        name = ALIASES.get(getippt)
+        if name not in self.FRAG_AUSFUEHRBAR:
+            return None
+        handler = self.router.handlers.get(name)
+        if handler is None:
+            return None
+        try:
+            echt = await handler(argument, sender)
+        except Exception as exc:
+            log.warning("frag_ausfuehrung_fehler", cmd=name, arg=argument, error=str(exc))
+            return None
+        # Eine Verwendungszeile ist keine Antwort: sie beginnt mit "!" und sagt
+        # dem Fragenden nur, wie der Befehl geht, den er gar nicht getippt hat.
+        if not echt or echt.startswith("!"):
+            return None
+        log.info("frag_ausgefuehrt", sender=sender, cmd=name, arg=argument, antwort=echt)
+        return echt
 
     # What a command needs when it is missing -- the shape and an example to
     # copy. The example is the more important half: someone typing `!sicht`

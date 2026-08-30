@@ -324,6 +324,89 @@ def test_eigener_notaus_laesst_den_rest_laufen(settings):
     assert run(b.cmd_frag("frage zwei", "OE8TEST")) is not None
 
 
+# --- ausfuehren statt verweisen --------------------------------------------
+
+
+def test_verweis_wird_erkannt():
+    assert h_frag.verweis("KI: Frag !netz, das zaehlt nach.") == ("netz", "")
+    assert h_frag.verweis("KI: Frag !gipfel dobratsch, das misst nach.") == ("gipfel", "dobratsch")
+    assert h_frag.verweis("KI: LoRa ist eine Funktechnologie.") is None
+
+
+def test_netzfrage_wird_ausgefuehrt_statt_verwiesen(settings):
+    """Die gemessene Antwort schlaegt den Verweis auf einen zweiten Befehl."""
+    b = Bot(settings)
+    b.http = antwortet("Frag !netz, das zaehlt nach.")
+
+    async def netz(arg, sender):
+        return "Netz KTN: 29/33 aktiv, Weiterl. 2578/1h"
+
+    b.router.handlers["netz"] = netz
+
+    a = run(b.cmd_frag("wie viele repeater gibt es", "OE8TEST"))
+    assert a == "Netz KTN: 29/33 aktiv, Weiterl. 2578/1h"
+    # Kein KI: -- das ist gemessen, nicht geraten.
+    assert not a.startswith("KI:")
+
+
+def test_bergfrage_reicht_das_argument_durch(settings):
+    gesehen = []
+    b = Bot(settings)
+    b.http = antwortet("Frag !gipfel dobratsch, das misst nach.")
+
+    async def gipfel(arg, sender):
+        gesehen.append(arg)
+        return "WX Dobratsch 2166m: 9.0C, 79%"
+
+    b.router.handlers["gipfel"] = gipfel
+    assert run(b.cmd_frag("wie hoch ist der dobratsch", "OE8TEST")) == "WX Dobratsch 2166m: 9.0C, 79%"
+    assert gesehen == ["dobratsch"]
+
+
+def test_nicht_ausfuehrbarer_befehl_bleibt_verweis(settings):
+    """!dist will Koordinaten. "villach klagenfurt" waere nur eine Verwendungszeile."""
+    b = Bot(settings)
+    b.http = antwortet("Frag !dist villach klagenfurt, das misst nach.")
+    a = run(b.cmd_frag("wie weit ist villach von klagenfurt", "OE8TEST"))
+    assert a == "KI: Frag !dist villach klagenfurt, das misst nach."
+
+
+def test_verwendungszeile_gilt_nicht_als_antwort(settings):
+    b = Bot(settings)
+    b.http = antwortet("Frag !gipfel, das misst nach.")
+
+    async def gipfel(arg, sender):
+        return "!gipfel <berg> - z.B. !gipfel dobratsch"
+
+    b.router.handlers["gipfel"] = gipfel
+    a = run(b.cmd_frag("wie hoch ist der berg", "OE8TEST"))
+    assert a == "KI: Frag !gipfel, das misst nach."
+
+
+def test_handlerfehler_faellt_auf_die_modellantwort_zurueck(settings):
+    b = Bot(settings)
+    b.http = antwortet("Frag !netz, das zaehlt nach.")
+
+    async def kaputt(arg, sender):
+        raise RuntimeError("Karten-API weg")
+
+    b.router.handlers["netz"] = kaputt
+    assert run(b.cmd_frag("wie viele repeater", "OE8TEST")) == "KI: Frag !netz, das zaehlt nach."
+
+
+def test_ausgefuehrtes_wird_nicht_zwischengespeichert(settings):
+    """Ein Messwert von jetzt ist in einer Stunde ein anderer."""
+    b = Bot(settings)
+    b.http = antwortet("Frag !netz, das zaehlt nach.")
+
+    async def netz(arg, sender):
+        return "Netz KTN: 29/33 aktiv"
+
+    b.router.handlers["netz"] = netz
+    run(b.cmd_frag("wie viele repeater", "OE8TEST"))
+    assert "wie viele repeater" not in b.cache_frag
+
+
 # --- watchdog for the inference host ---------------------------------------
 
 

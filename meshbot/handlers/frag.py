@@ -52,6 +52,29 @@ VORSPANN = re.compile(
     re.IGNORECASE,
 )
 
+# Ein Befehlsverweis in der Modellantwort: "Frag !netz, das zaehlt nach." Das
+# Argument endet am ersten Satzzeichen -- danach kommt die Begruendung, nicht
+# mehr der Befehl.
+VERWEIS = re.compile(r"!([a-zA-ZäöüÄÖÜ]+)\s*([^,.!?;]*)")
+
+
+def verweis(text: str) -> tuple[str, str] | None:
+    """Nennt die Antwort einen Befehl? Dann als (Name, Argument) zurueck.
+
+    Das Modell antwortet auf Netz- und Bergfragen mit "Frag !netz, das zaehlt
+    nach" -- es weiss also, welches Werkzeug gefragt waere, es kann es nur nicht
+    bedienen. Der Bot kann. Statt den Fragenden auf einen zweiten Befehl zu
+    schicken, fuehrt er ihn selbst aus und funkt das gemessene Ergebnis.
+
+    Hier wird nur erkannt, nicht entschieden. Welche Befehle ausgefuehrt werden
+    duerfen, weiss der Aufrufer -- der loest auch die Aliase auf.
+    """
+    m = VERWEIS.search(text)
+    if m is None:
+        return None
+    return m.group(1).lower(), m.group(2).strip()
+
+
 # A sentence end: a dot followed by whitespace or the end of the text, and not
 # preceded by a single letter.
 #

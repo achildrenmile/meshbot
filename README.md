@@ -334,7 +334,7 @@ a sentence from a measuring station, and everything the bot sends carries the
 operator's callsign. The prefix is the only thing that tells the two apart.
 
 **Failure is silence.** Inference runs locally on `rag-node-01` (Ollama, `gemma3:4b`, CPU,
-about 1.5 s per answer). There is no cloud fallback and no API key — deliberately: the command costs
+about 4 s per answer). There is no cloud fallback and no API key — deliberately: the command costs
 nothing to run and is allowed to be unavailable. If the box is down, `!frag` says
 nothing at all and every other command keeps working.
 

@@ -133,7 +133,7 @@ class Settings(BaseSettings):
     ollama_url: str = "http://192.168.1.32:30434/api/chat"
     # Measured on rag-node-01 against the production system prompt, five
     # questions each: gemma3:4b kept to the character budget five times out of
-    # five at ~1.5 s per answer, and deflected both fact questions to the
+    # five at ~4 s per answer, and deflected both fact questions to the
     # measured commands instead of inventing a number. gemma2:2b managed three
     # of five, llama3.2:3b one of three, llama3.1:8b ran at half the speed and
     # still invented, and gpt-oss:20b is killed by the OOM killer there.

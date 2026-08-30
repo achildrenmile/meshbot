@@ -67,7 +67,7 @@ a trace. The bot's usable budget is `MAX_MSG_LEN - SENDER_RESERVE`.
 | `!quota` | `!kontingent`, `!rest` | `Kontingent: 44/50 pro 1h00 frei. Bot 12/12 pro 10min` |
 | `!ping` | | `MeshBot OK, up 3d4h, 42 cmds` |
 | `!frag <question>` | `!frage`, `!ask`, `!ki` | `KI: Ein Repeater verstärkt und weiterleitet Signale im Funknetz.` |
-| `!version` | `!ver`, `!stand` | `MeshBot 1.6.0: !frag beantwortet freie Fragen, Antwort mit KI: markiert` |
+| `!version` | `!ver`, `!stand` | `MeshBot 1.7.0: Direktnachrichten: fragst du direkt, antworte ich direkt` |
 | `!help [cmd\|group]` | `!hilfe` | Overview; with a command, the details |
 
 Without a place, `!wx` and `!relais` use the default location from the configuration.
@@ -77,6 +77,34 @@ Typos are tolerated (`!wx vilach` finds Villach) — and **flagged**, see below.
 command correctly and merely forgot an argument has not produced garbage. The airtime
 is better spent on `!sicht <lat,lon> <lat,lon> - z.B. !sicht 46.60,13.67 46.79,14.96`
 than on a second round of guessing. An *unknown* command still gets silence.
+
+## Two ways in, two ways back
+
+An answer on the channel **floods**: channel messages carry no stored path, so
+every one of the 35 Carinthian repeaters transmits it once. A question and its
+answer together cost roughly **70 transmissions**. Half of that is ours.
+
+A direct message travels a known path and only burdens the repeaters on that
+chain:
+
+| | transmissions |
+|---|---|
+| today, on the channel | ~70 per exchange |
+| direct message, path known, 2 hops | ~8 |
+| first DM to a new contact | as today — the path lookup floods |
+
+So the bot answers **on the medium it was asked on**. Write on `#at-ktn-bot` and
+the answer appears there, where everyone reads along and one `!wx villach`
+serves five people. Write directly and the network is spared the flood.
+
+**It cannot start a direct message.** A channel message carries no sender
+identity at all — only a name in the text, which is neither a key nor
+trustworthy. Only somebody who wrote directly first can be answered directly.
+That also makes the per-sender limit meaningful there: a channel name can be
+changed to dodge it, a public key cannot.
+
+Off by default (`DM_ENABLED`), and it needs one line in the broker ACL — see
+[Configuration](#configuration).
 
 ## What gets found, and in which order
 
@@ -463,6 +491,8 @@ All values come from environment variables, see `.env.example`. The important on
 | `TRANSLITERATE` | rewrite umlauts as `ae/oe/ue`; **off** since 2026-08-28 |
 | `GLOBAL_LIMIT` / `SENDER_LIMIT` | airtime brakes |
 | `BOT_NAME` | own name, used for loop protection |
+| `DM_ENABLED` | answer direct messages directly, **default off** |
+| `TOPIC_RX_DIRECT` / `TOPIC_TX_DIRECT` | the direct-message topics |
 | `FRAG_ENABLED` | `!frag` on or off, **default off** |
 | `OLLAMA_URL` | inference endpoint, default `http://192.168.1.32:11434/api/chat` |
 | `FRAG_MODEL` | model name as Ollama knows it |

@@ -37,7 +37,7 @@ from .handlers import wxberg as h_berg
 from .health import serve_health
 from .mqtt_client import MqttClient
 from .ratelimit import SenderLimiter, TokenBucket
-from .router import ALIASES, Router
+from .router import ALIASES, Router, parse_payload
 from .version import VERSION
 from . import version as v_mod
 
@@ -1017,12 +1017,27 @@ class Bot:
         antwort = await self.router.handle(raw)
         if antwort is None:
             return
-        payload = self.settings.tx_template.format(
-            channel=self.settings.tx_channel,
-            text=antwort.replace('"', "'"),
-        )
-        log.info("antwort", text=antwort, laenge=len(antwort))
-        self.mqtt.publish(self.settings.topic_tx, payload)
+
+        # Zweiter Parse, mit Absicht. `Router.handle` gibt einen String zurueck,
+        # und dabei bleibt es: die Rueckgabe zu aendern braeche rund zwanzig
+        # Tests, und den Eingang am Router zu merken waere ein Rennen -- mehrere
+        # `on_message`-Coroutinen koennen gleichzeitig eingeplant sein und an
+        # jedem await verschraenken. `parse_payload` ist eine reine Funktion auf
+        # einem kleinen JSON; zweimal aufgerufen kostet das nichts.
+        eingang = parse_payload(raw, self.settings)
+        text = antwort.replace('"', "'")
+        if eingang is not None and eingang.direkt:
+            # Zurueck auf demselben Weg: ueber einen bekannten Pfad, statt durch
+            # jeden Repeater der Region.
+            topic = self.settings.topic_tx_direct
+            payload = self.settings.tx_template_direct.format(ziel=eingang.direkt, text=text)
+            weg = "direkt"
+        else:
+            topic = self.settings.topic_tx
+            payload = self.settings.tx_template.format(channel=self.settings.tx_channel, text=text)
+            weg = "kanal"
+        log.info("antwort", text=antwort, laenge=len(antwort), weg=weg)
+        self.mqtt.publish(topic, payload)
 
     def on_admin(self, raw: bytes) -> None:
         """Remote switches over MQTT.

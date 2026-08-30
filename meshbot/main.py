@@ -715,12 +715,26 @@ class Bot:
         # exactly that name; the pair of lines is the complete record.
         log.info("frag", sender=sender, frage=frage, modellantwort=antwort)
 
-        echt = await self._frag_ausfuehren(antwort, sender)
+        echt = await self._frag_ausfuehren(antwort, sender, frage)
         if echt is not None:
             # Bewusst **nicht** zwischengespeichert: das ist ein Messwert, und
             # der ist in einer Stunde ein anderer. Gecacht wird nur, was das
             # Modell aus sich heraus gesagt hat.
             return echt
+
+        # Sagt das Modell, dass es passt, ist das ehrlich -- aber keine Auskunft.
+        # Bevor der Fragende mit nichts dasteht, wird nachgeschlagen.
+        if self.settings.frag_wikipedia and h_frag.weiss_nicht(antwort):
+            wp = await h_frag.nachschlagen(self.http, self.settings, frage,
+                                           h_frag.budget(self.settings)
+                                           - len(self.settings.frag_wp_praefix)
+                                           + len(self.settings.frag_praefix))
+            if wp:
+                fertig = f"{self.settings.frag_wp_praefix} {wp}"
+                log.info("frag_wikipedia", sender=sender, frage=frage, antwort=fertig)
+                # Artikeltext aendert sich selten -- der darf in den Cache.
+                self.cache_frag[schluessel] = fertig
+                return fertig
 
         self.cache_frag[schluessel] = antwort
         return antwort
@@ -731,7 +745,25 @@ class Bot:
     # Verweis, den das Modell ohnehin geschrieben hat.
     FRAG_AUSFUEHRBAR = {"netz", "gipfel", "wx"}
 
-    async def _frag_ausfuehren(self, antwort: str, sender: str) -> str | None:
+    # !netz liefert Summen: wie viele Knoten aktiv sind, wie viel Verkehr lief,
+    # welcher am meisten trug. Auf "welche Repeater stehen auf dem Dobratsch"
+    # antwortet es nicht -- und das Modell merkt den Unterschied nicht. Es
+    # verwies auch dort auf !netz, und ein Gegenbeispiel im Systemprompt hat
+    # daran gemessen nichts geaendert.
+    #
+    # Also im Code. Ein Verweis auf !netz wird nur ausgefuehrt, wenn die Frage
+    # ueberhaupt nach einer Menge oder einem Zustand fragt. Sonst bleibt es beim
+    # Verweis -- den erkennt der Fragende selbst als unpassend, waehrend eine
+    # Statistik aussieht, als beantworte sie die Frage.
+    #
+    # Nur !netz braucht das: !gipfel und !wx tragen ihr Argument mit sich und
+    # koennen die Frage schon deshalb nicht verfehlen.
+    NETZ_FRAGT_NACH = ("wie viele", "wieviele", "wie viel", "wieviel", "anzahl",
+                       "verkehr", "zustand", "status", "aktiv", "ausgelastet",
+                       "los im netz", "laeuft im netz", "läuft im netz")
+
+    async def _frag_ausfuehren(self, antwort: str, sender: str,
+                               frage: str = "") -> str | None:
         """Nennt die Modellantwort einen Befehl, fuehre ihn aus.
 
         Das Modell weiss, welches Werkzeug gefragt waere -- es schreibt "Frag
@@ -751,6 +783,9 @@ class Bot:
         getippt, argument = ziel
         name = ALIASES.get(getippt)
         if name not in self.FRAG_AUSFUEHRBAR:
+            return None
+        if name == "netz" and not any(w in frage.lower() for w in self.NETZ_FRAGT_NACH):
+            log.info("frag_verweis_passt_nicht", frage=frage, cmd=name)
             return None
         handler = self.router.handlers.get(name)
         if handler is None:

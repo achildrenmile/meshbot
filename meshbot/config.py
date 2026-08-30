@@ -164,6 +164,20 @@ class Settings(BaseSettings):
     # Four characters off the budget, deliberately spent.
     frag_praefix: str = "KI:"
 
+    # --- Wikipedia als Rueckfall, wenn das Modell passt ---
+    # Greift nur, wenn die Modellantwort selbst "weiss ich nicht" sagt. Der
+    # Artikeltext wird **nicht** zusammengefasst, sondern nach dem ersten Satz
+    # abgeschnitten: eine Zusammenfassung durch dasselbe 4B-Modell braechte das
+    # Raten zurueck, nur mit einer Quelle daneben, die es glaubwuerdig aussehen
+    # laesst.
+    frag_wikipedia: bool = True
+    wikipedia_such_url: str = "https://de.wikipedia.org/w/api.php"
+    wikipedia_auszug_url: str = "https://de.wikipedia.org/api/rest_v1/page/summary/{titel}"
+    wikipedia_timeout_s: float = 8.0
+    # Eigenes Praefix, weil es eine andere Quelle ist. "KI:" waere hier gelogen:
+    # das hat niemand geraten, das steht so in einem Artikel.
+    frag_wp_praefix: str = "WP:"
+
     health_port: int = 8080
     # How long the MQTT connection may be gone before the health check reports
     # unhealthy. A reconnect takes seconds; two minutes distinguishes that from

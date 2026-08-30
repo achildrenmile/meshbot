@@ -196,7 +196,7 @@ longer does is *guess* among summits: that turned `lienz` into "Sandegg - Lienze
 **Where something is measured, nothing is computed** — that holds on mountains too:
 
 ```
-!wx dobratsch   →   WX Dobratsch (Villacher Alpe): 11.7C, 99%, Wind 30km/h SW, 791hPa
+!wx dobratsch   →   WX Dobratsch 2166m (Villacher Alpe): 11.7C, 99%, Wind 30km/h SW, 791hPa
 ```
 
 No `(Modell)`, because the *Villacher Alpe* station stands 200 m from the summit

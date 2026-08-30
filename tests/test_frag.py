@@ -444,6 +444,86 @@ def test_ausgefuehrtes_wird_nicht_zwischengespeichert(settings):
     assert "wie viele repeater" not in b.cache_frag
 
 
+# --- erfundene Befehle -----------------------------------------------------
+
+
+def test_erfundener_befehl_wird_erkannt():
+    """Im Kanal beobachtet: `wo liegt villach` -> `Frag !ort villach`.
+
+    `!ort` gibt es nicht. Wer der Empfehlung folgt, bekommt Stille -- unbekannte
+    Befehle beantwortet der Bot bewusst nicht -- und haelt ihn fuer kaputt.
+    """
+    from meshbot.router import ALIASES
+
+    assert h_frag.erfundener_befehl("KI: Frag !ort villach, das zeigt nach.", ALIASES) == "ort"
+    assert h_frag.erfundener_befehl("KI: Frag !netz, das zaehlt nach.", ALIASES) is None
+    assert h_frag.erfundener_befehl("KI: LoRa ist eine Funktechnologie.", ALIASES) is None
+
+
+def test_ausrufezeichen_im_text_ist_kein_befehl():
+    """Sonst verwirft "Wow!Super" eine tadellose Antwort."""
+    from meshbot.router import ALIASES
+
+    assert h_frag.erfundener_befehl("KI: Das ist toll!Super gemacht", ALIASES) is None
+    assert h_frag.erfundener_befehl("KI: Ja! Genau so", ALIASES) is None
+
+
+def test_erfundener_befehl_landet_bei_wikipedia(settings):
+    """Der Rueckfall beantwortet genau diese Frage richtig."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        u = str(request.url)
+        if "/api/chat" in u:
+            return httpx.Response(200, json={"message": {"content": "Frag !ort villach, das zeigt nach."}})
+        if "api.php" in u:
+            return httpx.Response(200, json={"query": {"search": [{"title": "Villach"}]}})
+        return httpx.Response(200, json={"extract": "Villach ist eine Stadt in Kärnten."})
+
+    b = Bot(settings)
+    b.http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    assert run(b.cmd_frag("wo liegt villach", "OE8TEST")) == "WP: Villach ist eine Stadt in Kärnten."
+
+
+def test_erfundener_befehl_ohne_wikipedia_wird_zu_weiss_ich_nicht(settings):
+    """Eine Empfehlung ins Leere ist schlechter als ein ehrliches Nichtwissen."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        u = str(request.url)
+        if "/api/chat" in u:
+            return httpx.Response(200, json={"message": {"content": "Frag !ort villach, das zeigt nach."}})
+        return httpx.Response(200, json={"query": {"search": []}})
+
+    b = Bot(settings)
+    b.http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    a = run(b.cmd_frag("wo liegt villach", "OE8TEST"))
+    assert a == "KI: weiss ich nicht"
+    assert "!ort" not in a
+
+
+def test_kaputte_antwort_wird_nicht_gecacht(settings):
+    """Die naechste Antwort desselben Modells kann brauchbar sein."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        u = str(request.url)
+        if "/api/chat" in u:
+            return httpx.Response(200, json={"message": {"content": "Frag !ort villach, das zeigt nach."}})
+        return httpx.Response(200, json={"query": {"search": []}})
+
+    b = Bot(settings)
+    b.http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    run(b.cmd_frag("wo liegt villach", "OE8TEST"))
+    assert "wo liegt villach" not in b.cache_frag
+
+
+def test_echter_verweis_wird_weiter_ausgefuehrt(settings):
+    """Die Pruefung darf den bestehenden Weg nicht stoeren."""
+    b = Bot(settings)
+    b.http = antwortet("Frag !netz, das zaehlt nach.")
+
+    async def netz(arg, sender):
+        return "Netz KTN: 29/33 aktiv"
+
+    b.router.handlers["netz"] = netz
+    assert run(b.cmd_frag("wie viele repeater gibt es", "OE8TEST")) == "Netz KTN: 29/33 aktiv"
+
+
 # --- Wikipedia als Rueckfall -----------------------------------------------
 
 

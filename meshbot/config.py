@@ -41,6 +41,23 @@ class Settings(BaseSettings):
     tx_template: str = '{{"channel": {channel}, "message": "{text}"}}'
     tx_channel: int = 3
 
+    # --- Direktnachrichten ---
+    # Eine Kanalantwort flutet: jeder der 35 Kaerntner Repeater sendet sie einmal
+    # aus. Eine Direktnachricht ueber einen bekannten Pfad belastet nur die
+    # Repeater dieser Kette. Der Bot antwortet auf dem Weg, auf dem gefragt wurde
+    # -- der Kanal bleibt, weil dort alle mitlesen und eine Antwort auf
+    # "!wx villach" fuenf Leuten gleichzeitig nuetzt.
+    #
+    # Beginnen kann der Bot eine DM nicht: eine Kanalnachricht traegt keine
+    # Absenderkennung, nur einen Namen im Text. Adressieren laesst sich nur, wer
+    # selbst zuerst direkt geschrieben hat.
+    dm_enabled: bool = False
+    topic_rx_direct: str = "meshinfra/message/direct/+"
+    topic_tx_direct: str = "meshinfra/tx/direct"
+    tx_template_direct: str = '{{"destination": "{ziel}", "message": "{text}"}}'
+    # 6 Bytes als 12 Hex-Zeichen, genau das Format, das send_msg als Ziel will.
+    json_path_direkt: str = "payload.pubkey_prefix"
+
     # --- Operation ---
     bot_enabled: bool = True
     bot_name: str = "MeshBot"

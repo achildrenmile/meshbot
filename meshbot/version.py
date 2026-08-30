@@ -15,15 +15,22 @@ minor for a new command, patch for a fix.
 
 from __future__ import annotations
 
-VERSION = "1.6.0"
+VERSION = "1.7.0"
 
 # One line, fit for the radio network. No longer than necessary -- the prefix
 # "MeshBot <version>: " comes off the budget.
-KURZ = "!frag beantwortet freie Fragen, Antwort mit KI: markiert"
+KURZ = "Direktnachrichten: fragst du direkt, antworte ich direkt"
 
 # The recent releases, newest first. Serves conversational debugging ("you are
 # still on 1.4") and never goes on the air.
 VERLAUF = [
+    ("1.7.0", "2026-08-30", "Direktnachrichten: wer den Bot direkt anschreibt, "
+                            "bekommt die Antwort direkt zurueck statt ueber den "
+                            "Kanal. Eine Kanalantwort flutet und beschaeftigt "
+                            "jeden der 35 Repeater; eine DM laeuft ueber einen "
+                            "bekannten Pfad. Der Kanal bleibt, weil dort alle "
+                            "mitlesen. Umgekehrt geht es nicht: eine "
+                            "Kanalnachricht traegt keine Absenderadresse"),
     ("1.6.0", "2026-08-29", "!frag beantwortet freie Fragen ueber ein Sprachmodell "
                             "auf rag-node-01; die Antwort traegt das Praefix KI:, weil "
                             "sie als einzige im Bot nicht gemessen ist; eigene Bremsen "

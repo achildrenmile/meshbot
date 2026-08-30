@@ -28,6 +28,10 @@ class Eingang:
     text: str
     sender: str
     channel: str | None
+    # Pubkey-Praefix des Absenders, wenn die Nachricht eine Direktnachricht war
+    # -- und damit die einzige Adresse, an die zurueckgeschrieben werden kann.
+    # Bei Kanalnachrichten `None`: die tragen keinerlei Absenderkennung.
+    direkt: str | None = None
 
 
 ALIASES = {
@@ -122,6 +126,19 @@ def parse_payload(raw: bytes | str, settings: Settings) -> Eingang | None:
     text = str(dig(data, settings.json_path_text) or "").strip()
     sender = str(dig(data, settings.json_path_sender) or "").strip()
     channel = dig(data, settings.json_path_channel)
+
+    # Direktnachricht: die traegt ein Pubkey-Praefix, und das ist zugleich der
+    # Absender und die Adresse fuer die Antwort.
+    #
+    # Zwei Dinge muessen hier anders laufen als beim Kanal. `split_sender_prefix`
+    # bleibt aussen vor -- in einer DM steht kein Name vor dem Text, die Funktion
+    # wuerde an einem beliebigen ": " im Nutztext trennen und den Anfang der
+    # Frage verschlucken. Und der Absender ist ein kryptografisches Praefix statt
+    # eines frei waehlbaren Namens: das Absenderlimit laesst sich auf dem Kanal
+    # durch Umbenennen umgehen, hier nicht.
+    direkt = dig(data, settings.json_path_direkt)
+    if settings.dm_enabled and direkt:
+        return Eingang(text=text, sender=str(direkt), channel=None, direkt=str(direkt))
 
     # On channel messages the sender is in the text, not in a field of its own.
     name, text = split_sender_prefix(text)

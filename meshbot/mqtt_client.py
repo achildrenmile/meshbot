@@ -70,10 +70,18 @@ class MqttClient:
         self.connected = True
         self.getrennt_seit = None
         client.subscribe(self.settings.topic_rx, qos=0)
+        # Direktnachrichten kommen je Absender auf einem eigenen Topic, daher
+        # das Platzhalter-Abo. Ohne die passende ACL-Zeile auf dem Broker
+        # verweigert Mosquitto es **stillschweigend** -- der Bot bliebe taub,
+        # ohne dass irgendwo ein Fehler auftaucht.
+        if self.settings.dm_enabled:
+            client.subscribe(self.settings.topic_rx_direct, qos=0)
         client.subscribe(self.settings.topic_admin, qos=1)
         if self._on_quota is not None:
             client.subscribe(self.settings.topic_quota, qos=1)
-        log.info("mqtt_verbunden", rx=self.settings.topic_rx, admin=self.settings.topic_admin)
+        log.info("mqtt_verbunden", rx=self.settings.topic_rx,
+                 rx_direkt=self.settings.topic_rx_direct if self.settings.dm_enabled else None,
+                 admin=self.settings.topic_admin)
 
     def _handle_disconnect(self, client: Any, userdata: Any, flags: Any, rc: Any, properties: Any = None) -> None:
         self.connected = False

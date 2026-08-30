@@ -722,9 +722,19 @@ class Bot:
             # Modell aus sich heraus gesagt hat.
             return echt
 
+        # Nennt die Antwort einen Befehl, den es nicht gibt, ist sie unbrauchbar:
+        # wer `!ort villach` tippt, bekommt Stille und haelt den Bot fuer kaputt.
+        # Der Text wird verworfen -- was danach kommt, ist der Rueckfall.
+        erfunden = h_frag.erfundener_befehl(antwort, ALIASES)
+        if erfunden:
+            log.warning("frag_erfundener_befehl", sender=sender, frage=frage,
+                        befehl=erfunden, modellantwort=antwort)
+
         # Sagt das Modell, dass es passt, ist das ehrlich -- aber keine Auskunft.
-        # Bevor der Fragende mit nichts dasteht, wird nachgeschlagen.
-        if self.settings.frag_wikipedia and h_frag.weiss_nicht(antwort):
+        # Bevor der Fragende mit nichts dasteht, wird nachgeschlagen. Dasselbe
+        # gilt fuer die erfundene Empfehlung: "wo liegt villach" beantwortet der
+        # erste Satz des Wikipedia-Artikels genau richtig.
+        if self.settings.frag_wikipedia and (erfunden or h_frag.weiss_nicht(antwort)):
             wp = await h_frag.nachschlagen(self.http, self.settings, frage,
                                            h_frag.budget(self.settings)
                                            - len(self.settings.frag_wp_praefix)
@@ -735,6 +745,12 @@ class Bot:
                 # Artikeltext aendert sich selten -- der darf in den Cache.
                 self.cache_frag[schluessel] = fertig
                 return fertig
+
+        # Findet auch die Wikipedia nichts, ist ein ehrliches "weiss ich nicht"
+        # besser als eine Empfehlung, die ins Leere fuehrt. Nicht gecacht: die
+        # naechste Antwort desselben Modells kann brauchbar sein.
+        if erfunden:
+            return f"{self.settings.frag_praefix} weiss ich nicht"
 
         self.cache_frag[schluessel] = antwort
         return antwort

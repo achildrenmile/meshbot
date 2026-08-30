@@ -57,7 +57,12 @@ VORSPANN = re.compile(
 # Ein Befehlsverweis in der Modellantwort: "Frag !netz, das zaehlt nach." Das
 # Argument endet am ersten Satzzeichen -- danach kommt die Begruendung, nicht
 # mehr der Befehl.
-VERWEIS = re.compile(r"!([a-zA-ZäöüÄÖÜ]+)\s*([^,.!?;]*)")
+#
+# Das `!` muss am Anfang oder nach einem Leerzeichen stehen, der Name mindestens
+# zwei Zeichen haben. Sonst liest "Wow!Super" ein Kommando namens "super" --
+# harmlos, solange nur ausgefuehrt wird, den Befehl gibt es ja nicht. Aber
+# `erfundener_befehl` wuerde eine tadellose Antwort deswegen verwerfen.
+VERWEIS = re.compile(r"(?:^|\s)!([a-zA-ZäöüÄÖÜ]{2,})\s*([^,.!?;]*)")
 
 
 def verweis(text: str) -> tuple[str, str] | None:
@@ -75,6 +80,25 @@ def verweis(text: str) -> tuple[str, str] | None:
     if m is None:
         return None
     return m.group(1).lower(), m.group(2).strip()
+
+
+def erfundener_befehl(text: str, bekannt) -> str | None:
+    """Nennt die Antwort einen Befehl, den es gar nicht gibt?
+
+    Beobachtet im Kanal: auf `wo liegt villach` antwortete das Modell mit
+    `Frag !ort villach, das zeigt nach.` -- `!ort` existiert nicht. Wer der
+    Empfehlung folgt, bekommt Stille, denn unbekannte Befehle beantwortet der
+    Bot bewusst nicht, und haelt ihn fuer kaputt.
+
+    Der Bot kennt seine eigene Befehlsliste. Diese Pruefung ist damit
+    deterministisch -- und deterministisch geht vor Prompt, das hat sich hier
+    schon zweimal gezeigt.
+    """
+    ziel = verweis(text)
+    if ziel is None:
+        return None
+    name, _ = ziel
+    return None if name in bekannt else name
 
 
 # A sentence end: a dot followed by whitespace or the end of the text, and not
@@ -277,7 +301,16 @@ def systemprompt(grenze: int) -> str:
         "Frage: Wie viele Repeater gibt es in Kaernten? "
         "Antwort: Frag !netz, das zaehlt nach. "
         "Frage: Wie hoch ist der Gerlitzen? "
-        "Antwort: Frag !gipfel gerlitzen, das misst nach."
+        "Antwort: Frag !gipfel gerlitzen, das misst nach. "
+        # Ortsfragen. Im Kanal beobachtet: "wo liegt klagenfurt" wurde mit
+        # "Liegt im Burgenland" beantwortet, "in welchem bundesland liegt
+        # villach" mit "Slovenien". Beides selbstsicher und falsch.
+        #
+        # Das Ziel ist hier nicht die richtige Antwort, sondern das Eingestaendnis:
+        # sagt das Modell "weiss ich nicht", greift der Wikipedia-Rueckfall und
+        # der beantwortet genau diese Frageform richtig.
+        "Frage: Wo liegt Villach? "
+        "Antwort: weiss ich nicht."
         # Hier stand ein Gegenbeispiel ("Welche Repeater stehen auf dem
         # Dobratsch? -- weiss ich nicht"), das den Fehlgriff auf !netz
         # verhindern sollte. Gemessen: wirkungslos, das Modell verwies weiter

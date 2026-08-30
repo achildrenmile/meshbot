@@ -255,18 +255,19 @@ class Bot:
             sid = st["id"]
             if sid in self.cache_wx:
                 return h_wx.render(name, self.cache_wx[sid], station=st["name"],
-                                   geraten=geraten)
+                                   geraten=geraten, hoehe=berg["alt"])
             try:
                 werte = await self._mit_retry(h_wx.fetch, self.settings, sid)
             except Exception:
                 alt = self.stale.get(f"wx:{sid}")
                 if alt is not None:
                     return h_wx.render(name, alt, stale=True, station=st["name"],
-                                       geraten=geraten)
+                                       geraten=geraten, hoehe=berg["alt"])
             else:
                 self.cache_wx[sid] = werte
                 self.stale[f"wx:{sid}"] = werte
-                return h_wx.render(name, werte, station=st["name"], geraten=geraten)
+                return h_wx.render(name, werte, station=st["name"], geraten=geraten,
+                                   hoehe=berg["alt"])
 
         ref = berg["ref"]
         if ref in self.cache_berg:

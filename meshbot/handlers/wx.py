@@ -214,7 +214,7 @@ def render_unbekannt(arg: str) -> str:
 
 def render(ort: str, werte: dict[str, Any], stale: bool = False,
            station: str | None = None, geraten: bool = False,
-           anzeige: str | None = None) -> str:
+           anzeige: str | None = None, hoehe: int | None = None) -> str:
     """One line, fixed order: temperature, humidity, wind, pressure.
 
     If the station sits somewhere other than the place asked for, it is named.
@@ -225,12 +225,22 @@ def render(ort: str, werte: dict[str, Any], stale: bool = False,
     answer stops claiming to know: `WX Villach?: 21C` reads as "I assume you
     mean Villach". Before this, a guessed answer was indistinguishable from a
     known one.
+
+    `hoehe` is set only by `!gipfel`, and only where a station stands on the
+    summit itself. Without it that command silently dropped the one thing it
+    adds over `!wx`: `!gipfel gerlitzen` answered `WX Gerlitzen 1909m: …` from
+    the model, `!gipfel dobratsch` answered `WX Dobratsch (Villacher Alpe): …`
+    from the measurement — same command, two shapes, and the elevation missing
+    exactly where the answer was best. Places never pass it: a place has no
+    single elevation worth naming.
     """
     marker = "~" if stale else ""
     # `anzeige` is the original spelling from OSM ("Nötsch im Gailtal"), the key
     # is the umlaut-free lookup form. If it is missing -- old file, or name and
     # key are identical anyway -- the key will do.
     kopf = (anzeige or ort.title()) + ("?" if geraten else "")
+    if hoehe is not None:
+        kopf = f"{kopf} {hoehe}m"
     if station and normalisiere(station) != normalisiere(anzeige or ort):
         kopf = f"{kopf} ({station})"
     teile = [f"WX {kopf}: {marker}"]

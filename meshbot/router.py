@@ -172,10 +172,35 @@ class Router:
         self.enabled = settings.bot_enabled
         self.started = time.time()
         self.served = 0
+        # Set from the outside once main.py has constructed both -- Router
+        # existed before MqttClient did, and the tests build one without the
+        # other. None simply means: nothing to publish to.
+        self.mqtt: Any = None
 
     def uptime(self) -> str:
         s = int(time.time() - self.started)
         return f"{s // 86400}d{s % 86400 // 3600}h" if s >= 86400 else f"{s // 3600}h{s % 3600 // 60}m"
+
+    def _publiziere_quota(self) -> None:
+        """Mirror of the gate's `meshinfra/gate/quota`, this time for our own
+        global bucket -- so an outside observer (Home Assistant) can see the
+        bot-side limit, not just the gate-side one. Retained: a subscriber
+        connecting mid-window should see the current state immediately, not
+        wait for the next command.
+        """
+        if self.mqtt is None:
+            return
+        verfuegbar = self.global_bucket.verfuegbar()
+        self.mqtt.publish(
+            "meshinfra/bot/quota",
+            json.dumps({
+                "limit": self.settings.global_limit,
+                "used": self.settings.global_limit - verfuegbar,
+                "remaining": verfuegbar,
+                "window_s": self.settings.global_window_s,
+            }),
+            retain=True,
+        )
 
     async def handle(self, raw: bytes | str) -> str | None:
         """Returns the finished answer, or None when staying silent."""
@@ -212,7 +237,9 @@ class Router:
         if not self.sender_limiter.allow(eingang.sender):
             log.info("absenderlimit", sender=eingang.sender, cmd=name)
             return None
-        if not self.global_bucket.allow():
+        erlaubt = self.global_bucket.allow()
+        self._publiziere_quota()
+        if not erlaubt:
             log.info("globales_limit", cmd=name)
             return None
 

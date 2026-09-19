@@ -15,7 +15,7 @@ minor for a new command, patch for a fix.
 
 from __future__ import annotations
 
-VERSION = "1.7.0"
+VERSION = "1.7.1"
 
 # One line, fit for the radio network. No longer than necessary -- the prefix
 # "MeshBot <version>: " comes off the budget.
@@ -24,6 +24,12 @@ KURZ = "Direktnachrichten: fragst du direkt, antworte ich direkt"
 # The recent releases, newest first. Serves conversational debugging ("you are
 # still on 1.4") and never goes on the air.
 VERLAUF = [
+    ("1.7.1", "2026-09-19", "Kein auf dem Funk sichtbarer Unterschied: der Bot "
+                            "veroeffentlicht sein eigenes globales Ratelimit "
+                            "jetzt zusaetzlich retained per MQTT "
+                            "(meshinfra/bot/quota), analog zum Gate. Grundlage "
+                            "fuer eine externe Anzeige (Home Assistant), ob das "
+                            "Bot-Limit gerade erreicht ist"),
     ("1.7.0", "2026-08-30", "Direktnachrichten: wer den Bot direkt anschreibt, "
                             "bekommt die Antwort direkt zurueck statt ueber den "
                             "Kanal. Eine Kanalantwort flutet und beschaeftigt "

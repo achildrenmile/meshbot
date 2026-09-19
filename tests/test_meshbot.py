@@ -187,6 +187,38 @@ def test_router_haelt_globales_limit_ein(settings):
     assert sum(1 for a in antworten if a) == 2
 
 
+def test_router_publiziert_bot_quota(settings):
+    """Jeder Befehl, der den globalen Bucket erreicht, aktualisiert die
+    retained MQTT-Momentaufnahme -- Grundlage fuer den HA-Ratelimit-Indicator."""
+    r = router(settings)
+    veroeffentlicht: list[tuple[str, str, bool]] = []
+
+    class FakeMqtt:
+        def publish(self, topic: str, payload: str, retain: bool = False) -> None:
+            veroeffentlicht.append((topic, payload, retain))
+
+    r.mqtt = FakeMqtt()
+    run(r.handle(payload("!ping")))
+
+    assert len(veroeffentlicht) == 1
+    topic, nutzlast, retain = veroeffentlicht[0]
+    assert topic == "meshinfra/bot/quota"
+    assert retain is True
+    daten = json.loads(nutzlast)
+    assert daten == {
+        "limit": settings.global_limit,
+        "used": 1,
+        "remaining": settings.global_limit - 1,
+        "window_s": settings.global_window_s,
+    }
+
+
+def test_router_ohne_mqtt_publiziert_nichts(settings):
+    """`router.mqtt` bleibt `None`, solange niemand es setzt (z. B. in Tests) --
+    `_publiziere_quota` darf dann nicht crashen."""
+    assert run(router(settings).handle(payload("!ping"))) == "Testantwort"
+
+
 def test_router_kill_switch(settings):
     r = router(settings)
     r.enabled = False

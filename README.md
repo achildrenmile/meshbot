@@ -67,7 +67,7 @@ a trace. The bot's usable budget is `MAX_MSG_LEN - SENDER_RESERVE`.
 | `!quota` | `!kontingent`, `!rest` | `Kontingent: 44/50 pro 1h00 frei. Bot 12/12 pro 10min` |
 | `!ping` | | `MeshBot OK, up 3d4h, 42 cmds` |
 | `!frag <question>` | `!frage`, `!ask`, `!ki` | `KI: Ein Repeater verstärkt und weiterleitet Signale im Funknetz.` |
-| `!version` | `!ver`, `!stand` | `MeshBot 1.7.0: Direktnachrichten: fragst du direkt, antworte ich direkt` |
+| `!version` | `!ver`, `!stand` | `MeshBot 1.7.1: Direktnachrichten: fragst du direkt, antworte ich direkt` |
 | `!help [cmd\|group]` | `!hilfe` | Overview; with a command, the details |
 
 Without a place, `!wx` and `!relais` use the default location from the configuration.
@@ -475,6 +475,22 @@ mosquitto_pub -h <broker> -t meshinfra/bot/admin -m "frag on"
 ```
 
 or `FRAG_ENABLED=false` in `.env` for the permanent version.
+
+## Observability
+
+The bot publishes its own global-bucket state retained on
+`meshinfra/bot/quota`, mirroring the gate's `meshinfra/gate/quota` --
+same shape (`limit`/`used`/`remaining`/`window_s`), so an outside
+subscriber (e.g. Home Assistant) can watch the bot-side airtime limit
+without polling `!quota` over the radio:
+
+```bash
+mosquitto_sub -h <broker> -t meshinfra/bot/quota
+```
+
+Updated after every command that reaches the global-limit check --
+allowed or blocked, since either way the bucket's state may have
+changed.
 
 ## Configuration
 

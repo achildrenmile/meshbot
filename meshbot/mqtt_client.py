@@ -58,8 +58,8 @@ class MqttClient:
         except Exception:
             pass
 
-    def publish(self, topic: str, payload: str) -> None:
-        self._client.publish(topic, payload, qos=1, retain=False)
+    def publish(self, topic: str, payload: str, retain: bool = False) -> None:
+        self._client.publish(topic, payload, qos=1, retain=retain)
 
     # --- Callbacks (paho thread) -----------------------------------------
 

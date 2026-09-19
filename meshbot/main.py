@@ -106,6 +106,7 @@ class Bot:
         self.quota: dict[str, Any] | None = None
         self.mqtt = MqttClient(settings, on_message=self.on_message,
                                on_admin=self.on_admin, on_quota=self.on_quota)
+        self.router.mqtt = self.mqtt
 
     # --- Commands --------------------------------------------------------
 

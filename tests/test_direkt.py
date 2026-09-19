@@ -111,8 +111,16 @@ def test_kanalfilter_blockiert_keine_dm(settings):
 
 
 def _gesendet(b: Bot) -> list[tuple[str, str]]:
+    """Records outgoing replies -- not the retained `meshinfra/bot/quota`
+    snapshot the router publishes alongside every command, which is a
+    separate side channel these tests do not care about."""
     raus: list[tuple[str, str]] = []
-    b.mqtt.publish = lambda topic, payload: raus.append((topic, payload))
+
+    def _publish(topic: str, payload: str, retain: bool = False) -> None:
+        if topic != "meshinfra/bot/quota":
+            raus.append((topic, payload))
+
+    b.mqtt.publish = _publish
     return raus
 
 

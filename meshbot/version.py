@@ -15,15 +15,21 @@ minor for a new command, patch for a fix.
 
 from __future__ import annotations
 
-VERSION = "1.7.1"
+VERSION = "1.7.2"
 
 # One line, fit for the radio network. No longer than necessary -- the prefix
 # "MeshBot <version>: " comes off the budget.
-KURZ = "Direktnachrichten: fragst du direkt, antworte ich direkt"
+KURZ = "Kein auf dem Funk sichtbarer Unterschied: !frag laeuft ueber ein Gateway"
 
 # The recent releases, newest first. Serves conversational debugging ("you are
 # still on 1.4") and never goes on the air.
 VERLAUF = [
+    ("1.7.2", "2026-09-27", "Kein auf dem Funk sichtbarer Unterschied: !frag "
+                            "spricht jetzt mit einem LiteLLM-Gateway "
+                            "(OpenAI-kompatibles /v1/chat/completions) statt "
+                            "direkt mit Ollama. Modell (gemma3:4b, ueber den "
+                            "Alias chat-small) und Antwortverhalten "
+                            "unveraendert"),
     ("1.7.1", "2026-09-19", "Kein auf dem Funk sichtbarer Unterschied: der Bot "
                             "veroeffentlicht sein eigenes globales Ratelimit "
                             "jetzt zusaetzlich retained per MQTT "

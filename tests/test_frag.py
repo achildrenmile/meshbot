@@ -53,11 +53,11 @@ def settings() -> Settings:
 
 
 def antwortet(text: str, status: int = 200):
-    """A stand-in Ollama that always says the same thing."""
+    """A stand-in for the LiteLLM gateway that always says the same thing."""
     def handler(request: httpx.Request) -> httpx.Response:
         if status != 200:
             return httpx.Response(status, text="kaputt")
-        return httpx.Response(200, json={"message": {"role": "assistant", "content": text}})
+        return httpx.Response(200, json={"choices": [{"message": {"role": "assistant", "content": text}}]})
     return httpx.AsyncClient(transport=httpx.MockTransport(handler))
 
 
@@ -115,22 +115,6 @@ def test_leere_antwort_wirft(settings):
     client = antwortet("")
     with pytest.raises(ValueError):
         run(h_frag.fetch(client, settings, "irgendwas"))
-
-
-def test_ollama_fehler_bei_status_200_wird_benannt(settings):
-    """Ollama reports its own failures as HTTP 200 with an `error` field.
-
-    Observed on rag-node-01: gpt-oss:20b gets killed by the OOM killer and the
-    request comes back 200 with
-    `{"error": "llama-server process has terminated: signal: killed"}`.
-    Both this and a genuinely empty answer end in silence on the air -- but only
-    one of them tells you the machine ran out of memory.
-    """
-    client = httpx.AsyncClient(transport=httpx.MockTransport(
-        lambda r: httpx.Response(200, json={"error": "llama-server process has terminated: signal: killed"})))
-    with pytest.raises(ValueError) as exc:
-        run(h_frag.fetch(client, settings, "irgendwas"))
-    assert "signal: killed" in str(exc.value)
 
 
 def test_antwort_nur_aus_muell_wirft():
@@ -258,7 +242,7 @@ def test_zweite_gleiche_frage_kommt_aus_dem_cache(settings):
 
     def handler(request: httpx.Request) -> httpx.Response:
         aufrufe.append(request)
-        return httpx.Response(200, json={"message": {"content": "Etwa 5 km"}})
+        return httpx.Response(200, json={"choices": [{"message": {"content": "Etwa 5 km"}}]})
 
     b = Bot(settings)
     b.http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
@@ -299,7 +283,7 @@ def test_zu_lange_frage_wird_gekappt(settings):
 
     def handler(request: httpx.Request) -> httpx.Response:
         gesehen.append(json.loads(request.content)["messages"][-1]["content"])
-        return httpx.Response(200, json={"message": {"content": "ok"}})
+        return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
 
     b = Bot(settings)
     b.http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
@@ -472,8 +456,8 @@ def test_erfundener_befehl_landet_bei_wikipedia(settings):
     """Der Rueckfall beantwortet genau diese Frage richtig."""
     def handler(request: httpx.Request) -> httpx.Response:
         u = str(request.url)
-        if "/api/chat" in u:
-            return httpx.Response(200, json={"message": {"content": "Frag !ort villach, das zeigt nach."}})
+        if "/chat/completions" in u:
+            return httpx.Response(200, json={"choices": [{"message": {"content": "Frag !ort villach, das zeigt nach."}}]})
         if "api.php" in u:
             return httpx.Response(200, json={"query": {"search": [{"title": "Villach"}]}})
         return httpx.Response(200, json={"extract": "Villach ist eine Stadt in Kärnten."})
@@ -487,8 +471,8 @@ def test_erfundener_befehl_ohne_wikipedia_wird_zu_weiss_ich_nicht(settings):
     """Eine Empfehlung ins Leere ist schlechter als ein ehrliches Nichtwissen."""
     def handler(request: httpx.Request) -> httpx.Response:
         u = str(request.url)
-        if "/api/chat" in u:
-            return httpx.Response(200, json={"message": {"content": "Frag !ort villach, das zeigt nach."}})
+        if "/chat/completions" in u:
+            return httpx.Response(200, json={"choices": [{"message": {"content": "Frag !ort villach, das zeigt nach."}}]})
         return httpx.Response(200, json={"query": {"search": []}})
 
     b = Bot(settings)
@@ -502,8 +486,8 @@ def test_kaputte_antwort_wird_nicht_gecacht(settings):
     """Die naechste Antwort desselben Modells kann brauchbar sein."""
     def handler(request: httpx.Request) -> httpx.Response:
         u = str(request.url)
-        if "/api/chat" in u:
-            return httpx.Response(200, json={"message": {"content": "Frag !ort villach, das zeigt nach."}})
+        if "/chat/completions" in u:
+            return httpx.Response(200, json={"choices": [{"message": {"content": "Frag !ort villach, das zeigt nach."}}]})
         return httpx.Response(200, json={"query": {"search": []}})
 
     b = Bot(settings)
@@ -587,8 +571,8 @@ def test_rueckfall_greift_nur_bei_weiss_ich_nicht(settings):
 
     def handler(request: httpx.Request) -> httpx.Response:
         u = str(request.url)
-        if "/api/chat" in u:
-            return httpx.Response(200, json={"message": {"content": "LoRa ist eine Funktechnologie."}})
+        if "/chat/completions" in u:
+            return httpx.Response(200, json={"choices": [{"message": {"content": "LoRa ist eine Funktechnologie."}}]})
         gesehen.append(u)
         return httpx.Response(200, json={"query": {"search": []}})
 
@@ -601,8 +585,8 @@ def test_rueckfall_greift_nur_bei_weiss_ich_nicht(settings):
 def test_rueckfall_traegt_eigenes_praefix(settings):
     def handler(request: httpx.Request) -> httpx.Response:
         u = str(request.url)
-        if "/api/chat" in u:
-            return httpx.Response(200, json={"message": {"content": "weiss ich nicht"}})
+        if "/chat/completions" in u:
+            return httpx.Response(200, json={"choices": [{"message": {"content": "weiss ich nicht"}}]})
         if "api.php" in u:
             return httpx.Response(200, json={"query": {"search": [{"title": "Klagenfurt"}]}})
         return httpx.Response(200, json={"extract": "Klagenfurt ist eine Großstadt in Kärnten."})
@@ -618,15 +602,18 @@ def test_rueckfall_traegt_eigenes_praefix(settings):
 # --- watchdog for the inference host ---------------------------------------
 
 
-def test_probe_url_zeigt_auf_version(settings):
-    """`version` answers without loading a model -- the probe must cost nothing.
+def test_probe_url_zeigt_auf_liveliness(settings):
+    """LiteLLM's liveliness probe answers without loading a model or touching
+    the database -- the probe must cost nothing.
 
     Derived from the configured URL rather than written out, so moving the
-    service to another host or port does not need a test change.
+    gateway to another host or port does not need a test change.
     """
-    assert h_frag.probe_url(settings) == settings.ollama_url.replace("/api/chat", "/api/version")
+    assert h_frag.probe_url(settings) == settings.ollama_url.replace(
+        "/v1/chat/completions", "/health/liveliness")
     assert h_frag.probe_url(
-        Settings(mqtt_host="x", ollama_url="http://host:9/api/chat/")) == "http://host:9/api/version"
+        Settings(mqtt_host="x", ollama_url="http://host:9/v1/chat/completions/")
+    ) == "http://host:9/health/liveliness"
 
 
 def test_probe_meldet_erreichbar_und_weg(settings):

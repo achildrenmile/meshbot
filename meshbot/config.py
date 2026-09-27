@@ -141,13 +141,22 @@ class Settings(BaseSettings):
     meldungen_datei: Path = Field(default=Path("/data/meldungen.jsonl"))
     topic_meldung: str = "meshinfra/bot/meldung"
 
-    # --- !frag: language model, local ---
+    # --- !frag: language model, via the LiteLLM gateway ---
     # Off by default. The first deployment must be able to change nothing, so
     # that a failure afterwards can only come from the switch being flipped.
     frag_enabled: bool = False
-    # rag-node-01. Same LAN, no tunnel, no authentication -- whoever reaches the
-    # port has the model, which is why it stays inside 192.168.1.0/24.
-    ollama_url: str = "http://192.168.1.32:30434/api/chat"
+    # Since the ai-gateway block (docs/llm-gateway.md in dcsetup): no more
+    # direct, unauthenticated Ollama access. This is now an OpenAI-compatible
+    # `/v1/chat/completions` endpoint behind LiteLLM, reached by its short
+    # in-cluster Service name (litellm.ai-gateway) -- never the full
+    # `.svc.cluster.local` form, see the DNS pitfall documented in
+    # docs/internal-dns.md: with ndots:5 in this cluster, the full form gets
+    # silently resolved against the wrong (external) domain instead of the
+    # cluster-internal one.
+    ollama_url: str = "http://litellm.ai-gateway:4000/v1/chat/completions"
+    # Virtual key scoped to exactly one alias (chat-small) on the gateway --
+    # this process has no business reaching any other model.
+    litellm_api_key: str = ""
     # Measured on rag-node-01 against the production system prompt, five
     # questions each: gemma3:4b kept to the character budget five times out of
     # five at ~4 s per answer, and deflected both fact questions to the
@@ -159,7 +168,13 @@ class Settings(BaseSettings):
     # writes its reasoning into the answer as plain prose ("Okay, I need to
     # answer the question..."), 320+ characters every time. There are no
     # <think> tags, so DENKBLOCK in the handler cannot strip it either.
-    frag_model: str = "gemma3:4b"
+    # Independently re-confirmed 2026-09-27 against the gateway with a fresh
+    # 8-question comparison run and a purpose-built `/no_think` Modelfile --
+    # neither changed the outcome (docs/llm-gateway.md in dcsetup).
+    #
+    # "chat-small" is the gateway alias for gemma3:4b, not the raw Ollama
+    # model name -- the gateway resolves aliases, not model names.
+    frag_model: str = "chat-small"
     # Its own timeout: http_timeout_s (5s) is sized for web APIs, and CPU
     # inference of eighty tokens takes longer than that.
     frag_timeout_s: float = 20.0

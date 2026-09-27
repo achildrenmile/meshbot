@@ -211,14 +211,17 @@ def budget(settings) -> int:
 
 
 def probe_url(settings) -> str:
-    """`.../api/chat` -> `.../api/version`.
+    """`.../v1/chat/completions` -> `.../health/liveliness`.
 
-    Deliberately `version` and not `tags` or a real request: it answers without
-    touching a model, so the watchdog costs no CPU on a machine that is busy
-    with other things.
+    LiteLLM's liveliness probe (docs.litellm.ai/docs/proxy/health): answers
+    without touching a model or the database, unauthenticated, so the
+    watchdog costs no GPU time on a machine that is busy with other things.
+    Deliberately not `/health/readiness` -- that one *does* check the
+    gateway's own database connection, which is a different failure mode than
+    "is the gateway process up at all".
     """
-    basis = settings.ollama_url.split("/api/")[0].rstrip("/")
-    return f"{basis}/api/version"
+    basis = settings.ollama_url.split("/v1/")[0].rstrip("/")
+    return f"{basis}/health/liveliness"
 
 
 async def erreichbar(client: httpx.AsyncClient, settings) -> bool:
@@ -324,32 +327,39 @@ def systemprompt(grenze: int) -> str:
 
 
 async def fetch(client: httpx.AsyncClient, settings, frage: str) -> str:
-    """One request to Ollama. Raises on anything unusable — the caller stays silent.
+    """One request through the LiteLLM gateway. Raises on anything unusable —
+    the caller stays silent.
 
     Deliberately not routed through `Bot._mit_retry`: with `http_retries=1` a
     timeout would turn 20 seconds into 40, and by then the answer is worthless
-    anyway. One attempt, then nothing.
+    anyway. One attempt, then nothing. The gateway itself also has
+    `num_retries: 0` for the same reason (docs/llm-gateway.md in dcsetup) --
+    there is exactly one GPU behind it, and a retry only ever makes a timeout
+    worse, never better.
 
-    `num_predict` is the real cost ceiling. It bounds not just the length of the
-    answer but the time the machine spends on it, so a model that ignores the
-    system prompt and starts an essay cannot occupy the service.
+    `max_tokens` is the real cost ceiling in the OpenAI schema (LiteLLM maps it
+    to Ollama's native `num_predict` -- verified live, see docs/llm-gateway.md).
+    It bounds not just the length of the answer but the time the machine
+    spends on it, so a model that ignores the system prompt and starts an
+    essay cannot occupy the service.
+
+    No `think` field here on purpose: verified (2026-09-27) that LiteLLM's
+    `ollama_chat` provider does not translate it, in the request body or in
+    the gateway's own model config, to Ollama's native thinking control --
+    moot anyway, since `frag_model` never points at a reasoning model.
     """
     grenze = budget(settings)
+    headers = {"Authorization": f"Bearer {settings.litellm_api_key}"} if settings.litellm_api_key else {}
     resp = await client.post(
         settings.ollama_url,
+        headers=headers,
         json={
             "model": settings.frag_model,
             "stream": False,
-            # Qwen-style models reason by default. Thinking tokens are generated
-            # at the same speed as any other and would multiply the latency for
-            # a one-line answer.
-            "think": False,
-            "options": {
-                "num_predict": settings.frag_num_predict,
-                # Low, not zero: zero makes small models repeat themselves when
-                # a question has no good answer.
-                "temperature": 0.3,
-            },
+            "max_tokens": settings.frag_num_predict,
+            # Low, not zero: zero makes small models repeat themselves when
+            # a question has no good answer.
+            "temperature": 0.3,
             "messages": [
                 {"role": "system", "content": systemprompt(grenze)},
                 {"role": "user", "content": frage},
@@ -359,16 +369,7 @@ async def fetch(client: httpx.AsyncClient, settings, frage: str) -> str:
     )
     resp.raise_for_status()
     daten = resp.json()
-    # Ollama reports several of its own failures as HTTP 200 with an `error`
-    # field -- a model that cannot be loaded, or one the OOM killer took down
-    # mid-request. `raise_for_status` sees nothing wrong with those, and without
-    # this check the caller logs "leere Antwort vom Modell" for what is really
-    # "the machine ran out of memory". Both end in silence on the air; only one
-    # of them tells you where to look.
-    fehler = daten.get("error")
-    if fehler:
-        raise ValueError(f"Ollama meldet: {fehler}")
-    text = str(daten.get("message", {}).get("content", "")).strip()
+    text = str(daten.get("choices", [{}])[0].get("message", {}).get("content", "")).strip()
     if not text:
         raise ValueError("leere Antwort vom Modell")
     return text

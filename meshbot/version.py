@@ -15,15 +15,16 @@ minor for a new command, patch for a fix.
 
 from __future__ import annotations
 
-VERSION = "1.9.2"
+VERSION = "1.9.3"
 
 # One line, fit for the radio network. No longer than necessary -- the prefix
 # "MeshBot <version>: " comes off the budget.
-KURZ = "!frag gibt gepflegte Regeln unveraendert aus"
+KURZ = "!frag erkennt Wortformen bei gepflegten Regeln"
 
 # The recent releases, newest first. Serves conversational debugging ("you are
 # still on 1.4") and never goes on the air.
 VERLAUF = [
+    ("1.9.3", "2026-10-16", "Werkzeug wissen erkennt Wortformen (gleicher Wortanfang ab 5 Buchstaben, ss=ß): benenne, Benennung, nennen finden denselben Eintrag"),
     ("1.9.2", "2026-10-16", "Treffer des Werkzeugs wissen gehen unveraendert als Antwort raus (kein Umformulieren durch das Modell); ein Treffer braucht mindestens zwei Stichworte"),
     ("1.9.1", "2026-10-16", "!frag bekommt das Werkzeug wissen: gepflegte Regeln mit Quelle aus WISSEN_FILE, z.B. wie Repeater im MeshCore-Netz benannt werden"),
     ("1.9.0", "2026-10-16", "!frag kann (FRAG_WERKZEUGE=true) lesende Bot-Befehle "

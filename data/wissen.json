@@ -1,6 +1,6 @@
 {"eintraege": [
   {"thema": "Repeater im MeshCore-Netz benennen",
    "stichworte": ["repeater", "benennen", "name", "namen", "namensschema", "meshcore", "heissen", "heißen", "lv8", "landesverband", "at"],
-   "text": "AT-BEZIRK-NAME nach KFZ-Bezirk, z.B. AT-VI-Name; nicht nach Landesverband (LV8)",
+   "text": "Revier abstecken geht anders: AT-BEZIRK-NAME, z.B. AT-VI-Name. LV8 ist Verein, nicht Bezirk",
    "quelle": "meshcore.at"}
 ]}

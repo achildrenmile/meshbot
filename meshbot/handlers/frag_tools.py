@@ -70,6 +70,7 @@ def systemprompt(grenze: int) -> str:
         "Du beantwortest Fragen im Funknetz CarinthiaMesh. "
         f"Antworte auf Deutsch, in einer einzigen Zeile, hoechstens {grenze} Zeichen. "
         "Kein Markdown, keine Aufzaehlung, kein Vorspann, keine Rueckfrage. "
+        "Ton: freundlich, gern mit einem Augenzwinkern, nie albern oder abwertend. "
         "Fuer aktuelle Daten (Wetter, Netz, Termine, Mond, ISS, DX, Relais) rufe das "
         "passende Werkzeug auf, statt zu raten, und antworte mit dem gemessenen Wert. "
         "Fuer Regeln und Konventionen im Mesh (Benennung, Vorgaben) nutze das Werkzeug "

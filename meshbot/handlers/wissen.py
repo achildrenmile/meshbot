@@ -20,7 +20,8 @@ import structlog
 
 log = structlog.get_logger(__name__)
 
-MAX_TREFFER = 2
+MAX_TREFFER = 1
+MIN_PUNKTE = 2
 
 
 def _worte(text: str) -> set[str]:
@@ -53,7 +54,7 @@ class Wissen:
         bewertet = []
         for e in self.aktuell():
             punkte = len(gesucht & (_worte(" ".join(map(str, e.get("stichworte", [])))) | _worte(str(e.get("thema", "")))))
-            if punkte:
+            if punkte >= MIN_PUNKTE:
                 bewertet.append((punkte, e))
         bewertet.sort(key=lambda p: -p[0])
         return [e for _, e in bewertet[:MAX_TREFFER]]
@@ -63,4 +64,4 @@ class Wissen:
         if not treffer:
             return None
         return " | ".join(
-            f"{e['text']}" + (f" (Quelle: {e['quelle']})" if e.get("quelle") else "") for e in treffer)
+            f"{e['text']}" + (f" ({e['quelle']})" if e.get("quelle") else "") for e in treffer)

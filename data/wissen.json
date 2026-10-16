@@ -1,6 +1,6 @@
 {"eintraege": [
   {"thema": "Repeater im MeshCore-Netz benennen",
-   "stichworte": ["repeater", "benennen", "name", "namen", "namensschema", "meshcore", "heissen", "heißen", "lv8", "landesverband", "at"],
-   "text": "Level 8? Wir zocken hier nicht! Es zaehlt der Bezirk: AT-BEZIRK-NAME, z.B. AT-VI-Name",
+   "stichworte": ["repeater", "benennen", "name", "namen", "namensschema", "meshcore", "heissen", "lv8", "landesverband"],
+   "text": "Level 8? Wir zocken nicht! Bezirk zaehlt: AT-BEZIRK-NAME, z.B. AT-VI-Name",
    "quelle": "meshcore.at"}
 ]}

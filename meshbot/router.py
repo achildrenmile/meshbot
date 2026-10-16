@@ -62,6 +62,8 @@ ALIASES = {
     # groups before aliases, and the *command* !berg still works. "summit" is
     # already taken by !sota and stays there.
     "gipfel": "gipfel", "berg": "gipfel", "peak": "gipfel",
+    "events": "events", "event": "events", "termine": "events", "termin": "events",
+    "upcoming": "events",
     "version": "version", "ver": "version", "stand": "version",
     "frag": "frag", "frage": "frag", "ask": "frag", "ki": "frag",
 }

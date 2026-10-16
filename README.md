@@ -53,6 +53,7 @@ a trace. The bot's usable budget is `MAX_MSG_LEN - SENDER_RESERVE`.
 | `!spot [assoc]` | `!spots` | `OE8XXX OE/KT-048 14.062 CW 12min` |
 | `!sonne [place\|lat lon]` | `!sun` | `Sonne: auf 06:04, unter 20:15, dunkel 20:48 (noch 1h03)` |
 | `!mond [place\|lat lon]` | `!moon` | `Mond: auf 10:28, unter 21:33, zunehmend 17%` |
+| `!events` | `!event`, `!termine` | `Event: Mesh-Treffen, Villach - 14.11. 10:00 (in 29 Tagen)` |
 | `!sicht <lat,lon> <lat,lon>` | `!los` | `Sicht 18.4km: FREI, Fresnel 100% (enger bei km17.5, 1347m)` |
 | `!hoehe <lat,lon>` | `!seehoehe` | `Hoehe 46.6719,13.8902: 1478m (EU-DEM 25m)` |
 | `!dist <lat,lon> <lat,lon>` | `!entfernung` | `37.9km, Peilung 312 NW (zurueck 132 SO)` |
@@ -67,7 +68,7 @@ a trace. The bot's usable budget is `MAX_MSG_LEN - SENDER_RESERVE`.
 | `!quota` | `!kontingent`, `!rest` | `Kontingent: 44/50 pro 1h00 frei. Bot 12/12 pro 10min` |
 | `!ping` | | `MeshBot OK, up 3d4h, 42 cmds` |
 | `!frag <question>` | `!frage`, `!ask`, `!ki` | `KI: Ein Repeater verstärkt und weiterleitet Signale im Funknetz.` |
-| `!version` | `!ver`, `!stand` | `MeshBot 1.7.1: Direktnachrichten: fragst du direkt, antworte ich direkt` |
+| `!version` | `!ver`, `!stand` | `MeshBot 1.8.0: Neu: !events nennt den naechsten Termin` |
 | `!help [cmd\|group]` | `!hilfe` | Overview; with a command, the details |
 
 Without a place, `!wx` and `!relais` use the default location from the configuration.
@@ -276,13 +277,13 @@ foreign mountain.
 Three stages: all commands, one group, one command.
 
 ```
-!help            24 Befehle in 5 Gruppen: wetter berg standort netz sonst | !help <thema>
+!help            25 Befehle in 5 Gruppen: wetter berg standort netz sonst | !help <thema>
 !help berg       Berg: !gipfel !sota !az !spot !sonne !mond
 !help az         !az <lat lon> stehst du in der SOTA-Aktivierungszone? Polygon von SOTLAS
 !help pfad       aliases resolve too — this is the help for !wo
 ```
 
-The flat list used to be the normal case. It no longer fits: at 24 commands the
+The flat list used to be the normal case. It no longer fits: at 25 commands the
 overview falls back to group names by itself rather than being truncated at the
 character limit. A test checks, at every character limit, that **either** all commands
 **or** all groups are named — never a stump. Two more tests check that every command
@@ -579,6 +580,23 @@ a truncated directory is worse than a stale one.
 **Weather stations**: `data/stations_ktn.json` maps places to the nearest TAWES
 station. Valley stations are preferred deliberately (up to 1100 m), otherwise a query
 for Nötsch returns the values of the Villacher Alpe at 2140 m.
+
+**Events**: `data/events.json` (or the file named by `EVENTS_FILE`) is the list `!events`
+reads. Edit it by hand; it is re-read whenever its modification time changes, so no
+restart is needed. `!events` answers exactly one event: the first one not yet over.
+
+```json
+{"events": [
+  {"datum": "2026-11-14", "zeit": "10:00", "name": "Mesh-Treffen", "ort": "Villach",
+   "bis": "2026-11-15"}
+]}
+```
+
+Only `datum` (ISO) and `name` are required; `zeit`, `ort` and `bis` (last day of a
+multi-day event) are optional. An event without `zeit` counts for the whole day, one
+with `zeit` until that time, a multi-day event until its last day (answer then reads
+"laeuft bis"). An unreadable entry is skipped and logged; an unreadable file keeps the
+last good list. No event ahead: `Events: keine geplant`.
 
 ## Tests
 

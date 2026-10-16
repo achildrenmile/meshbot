@@ -17,6 +17,7 @@ from .handlers import az as h_az
 from .handlers import dx as h_dx
 from .handlers import events as h_events
 from .handlers import frag as h_frag
+from .handlers import frag_tools as h_tools
 from .handlers import geo as h_geo
 from .handlers import ortsuche as h_ort
 from .handlers import iss as h_iss
@@ -704,8 +705,19 @@ class Bot:
             log.info("frag_tageslimit", sender=sender)
             return None
 
+        werkzeuge: list[str] = []
         try:
-            roh = await h_frag.fetch(self.http, self.settings, frage)
+            roh = None
+            if self.settings.frag_werkzeuge:
+                try:
+                    roh, werkzeuge = await h_tools.fetch(
+                        self.http, self.settings, frage, h_frag.budget(self.settings),
+                        sender, {n: h for n, h in self.router.handlers.items() if n != "frag"})
+                except Exception as exc:
+                    log.warning("frag_werkzeuge_fehler", sender=sender, frage=frage, error=str(exc))
+                    roh = None
+            if roh is None:
+                roh = await h_frag.fetch(self.http, self.settings, frage)
             antwort = h_frag.render(roh, self.settings.frag_praefix,
                                     h_frag.budget(self.settings))
         except Exception as exc:
@@ -721,7 +733,11 @@ class Bot:
         # calling it "antwort" would be a lie, because on a long answer the two
         # differ. What actually went on the air is logged by `on_message` under
         # exactly that name; the pair of lines is the complete record.
-        log.info("frag", sender=sender, frage=frage, modellantwort=antwort)
+        log.info("frag", sender=sender, frage=frage, modellantwort=antwort, werkzeuge=werkzeuge)
+
+        # Eine Antwort aus Messwerten ist in einer Stunde schon falsch.
+        if werkzeuge:
+            return antwort
 
         echt = await self._frag_ausfuehren(antwort, sender, frage)
         if echt is not None:

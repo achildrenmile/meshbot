@@ -15,15 +15,19 @@ minor for a new command, patch for a fix.
 
 from __future__ import annotations
 
-VERSION = "1.8.0"
+VERSION = "1.9.0"
 
 # One line, fit for the radio network. No longer than necessary -- the prefix
 # "MeshBot <version>: " comes off the budget.
-KURZ = "Neu: !events nennt den naechsten Termin"
+KURZ = "!frag kann Messwerte selbst abrufen"
 
 # The recent releases, newest first. Serves conversational debugging ("you are
 # still on 1.4") and never goes on the air.
 VERLAUF = [
+    ("1.9.0", "2026-10-16", "!frag kann (FRAG_WERKZEUGE=true) lesende Bot-Befehle "
+                            "selbst aufrufen (Wetter, Netz, Mond, ISS, DX, Relais, "
+                            "Termine ...), hoechstens 3 Modellrunden, feste Whitelist; "
+                            "Modelle ohne Werkzeugunterstuetzung antworten wie bisher"),
     ("1.8.0", "2026-10-16", "Neu: !events (Aliase !event !termine) nennt genau den "
                             "naechsten Termin aus einer gepflegten JSON-Liste "
                             "(EVENTS_FILE). Die Datei wird bei Aenderung neu "

@@ -195,6 +195,10 @@ class Settings(BaseSettings):
     # Marks the answer as coming from a model rather than from a measurement.
     # Four characters off the budget, deliberately spent.
     frag_praefix: str = "KI:"
+    # Werkzeuge: das Modell ruft die Messbefehle des Bots selbst auf
+    # (handlers/frag_tools.py). Aus, solange das Modell dahinter keine Werkzeuge
+    # kann; das lokale Fallback-Modell ignoriert sie und antwortet wie bisher.
+    frag_werkzeuge: bool = False
 
     # --- Wikipedia als Rueckfall, wenn das Modell passt ---
     # Greift nur, wenn die Modellantwort selbst "weiss ich nicht" sagt. Der

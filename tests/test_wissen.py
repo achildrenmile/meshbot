@@ -36,3 +36,13 @@ def test_kaputte_datei_behaelt_letzten_stand(tmp_path):
     p.write_text("{kaputt", encoding="utf-8")
     os.utime(p, (1, 1))
     assert w.aktuell()
+
+
+def test_wortformen_und_eszett(tmp_path):
+    e = dict(E, stichworte=["repeater", "benennen", "nennen", "heissen"])
+    w = datei(tmp_path, [e])
+    for frage in ["Wie benenne ich meinen Repeater?", "Benennung für Repeater",
+                  "Wie nenne ich meinen Repeater?", "Wie soll der Repeater heißen?"]:
+        assert w.suche(frage), frage
+    assert not w.suche("Wie ist das Wetter?")
+    assert not w.suche("Repeater")

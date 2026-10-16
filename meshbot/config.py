@@ -200,6 +200,8 @@ class Settings(BaseSettings):
     # kann; das lokale Fallback-Modell ignoriert sie und antwortet wie bisher.
     frag_werkzeuge: bool = False
     wissen_file: Path = Field(default=DATA_DIR / "wissen.json")
+    # SearXNG fuer das !frag-Werkzeug `suche`; leer = aus.
+    search_url: str = ""
 
     # --- Wikipedia als Rueckfall, wenn das Modell passt ---
     # Greift nur, wenn die Modellantwort selbst "weiss ich nicht" sagt. Der

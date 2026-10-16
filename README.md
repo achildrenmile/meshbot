@@ -68,7 +68,7 @@ a trace. The bot's usable budget is `MAX_MSG_LEN - SENDER_RESERVE`.
 | `!quota` | `!kontingent`, `!rest` | `Kontingent: 44/50 pro 1h00 frei. Bot 12/12 pro 10min` |
 | `!ping` | | `MeshBot OK, up 3d4h, 42 cmds` |
 | `!frag <question>` | `!frage`, `!ask`, `!ki` | `KI: Ein Repeater verstärkt und weiterleitet Signale im Funknetz.` |
-| `!version` | `!ver`, `!stand` | `MeshBot 1.9.4: !frag sucht Regeln mit der Originalfrage` |
+| `!version` | `!ver`, `!stand` | `MeshBot 1.10.0: !frag kann im Web nachsehen` |
 | `!help [cmd\|group]` | `!hilfe` | Overview; with a command, the details |
 
 Without a place, `!wx` and `!relais` use the default location from the configuration.
@@ -515,6 +515,7 @@ All values come from environment variables, see `.env.example`. The important on
 | `FRAG_MODEL` | model name as Ollama knows it |
 | `FRAG_NUM_PREDICT` | token ceiling per answer — the real cost limit, default 80 |
 | `FRAG_WERKZEUGE` | `!frag` darf lesende Bot-Befehle als Werkzeuge aufrufen (Function-Calling, max. 3 Runden, feste Whitelist in `handlers/frag_tools.py`), default off; Antworten daraus werden nicht gecacht |
+| `SEARCH_URL` | SearXNG-Basis-URL fuer das `!frag`-Werkzeug `suche` (nur Domain, Titel, kurzer Auszug; leer = aus) |
 | `WISSEN_FILE` | JSON mit gepflegten Regeln samt Quelle (`eintraege`: thema, stichworte, text, quelle); das `!frag`-Werkzeug `wissen` liest sie, mtime-Reload |
 | `FRAG_SENDER_LIMIT` / `FRAG_TAGESLIMIT` | `!frag`'s own brakes, default 2 per 15 min and 100 per day |
 

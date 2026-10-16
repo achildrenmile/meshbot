@@ -15,6 +15,7 @@ from cachetools import TTLCache
 from .config import Settings, load_settings
 from .handlers import az as h_az
 from .handlers import dx as h_dx
+from .handlers import events as h_events
 from .handlers import frag as h_frag
 from .handlers import geo as h_geo
 from .handlers import ortsuche as h_ort
@@ -91,6 +92,7 @@ class Bot:
         # every other command still works.
         self.frag_erreichbar: bool | None = None
         self.stale: dict[str, Any] = {}          # letzte gute Antwort je Schlüssel
+        self.events = h_events.EventListe(settings.events_file)
         self.router = Router(settings, {
             "wx": self.cmd_wx, "warn": self.cmd_warn, "sota": self.cmd_sota,
             "relais": self.cmd_relais, "ping": self.cmd_ping, "help": self.cmd_help,
@@ -101,6 +103,7 @@ class Bot:
             "dx": self.cmd_dx, "mond": self.cmd_mond, "iss": self.cmd_iss,
             "az": self.cmd_az, "quota": self.cmd_quota, "gipfel": self.cmd_gipfel,
             "version": self.cmd_version, "frag": self.cmd_frag,
+            "events": self.cmd_events,
         })
         # The gate's last quota state. Arrives retained on subscribe.
         self.quota: dict[str, Any] | None = None
@@ -646,6 +649,10 @@ class Bot:
         werte = h_mond.ereignisse(jetzt.date(), *koord)
         return h_mond.render(werte, self.settings.tz_offset_h)
 
+    async def cmd_events(self, arg: str, sender: str) -> str:
+        jetzt = h_events.jetzt_lokal(self.settings.tz_offset_h)
+        return h_events.render(h_events.naechstes(self.events.aktuell(), jetzt), jetzt.date())
+
     async def cmd_iss(self, arg: str, sender: str) -> str:
         koord = h_sota.parse_coords(arg)
         if koord is None:
@@ -848,6 +855,7 @@ class Bot:
     HILFE = {
         "wx": "!wx <ort|lat lon> Messwerte einer der 34 Stationen in Kaernten. Fuer Berge: !gipfel",
         "gipfel": "!gipfel <berg> Gipfelwetter aus dem Modell, AT/IT/SI/DE/CH/HR/CZ/SK/HU/PL. Alias !berg",
+        "events": "!events naechster Termin aus der gepflegten Liste. Aliase !event !termine",
         "version": "!version welcher Stand laeuft und was daran neu ist. Aliase !ver !stand",
         "vorhersage": "!vorhersage <ort|lat lon> Spanne, Regen und Boeen der naechsten 24h",
         "warn": "!warn [ort|lat lon] amtliche Warnungen der Gemeinde (GeoSphere). Ohne Angabe ganz Kaernten",
@@ -880,7 +888,7 @@ class Bot:
         "berg": ["gipfel", "sota", "az", "spot", "sonne", "mond"],
         "standort": ["sicht", "hoehe", "dist", "qth"],
         "netz": ["netz", "wo", "relais", "ping", "quota"],
-        "sonst": ["dx", "iss", "zeit", "melde", "frag", "version"],
+        "sonst": ["dx", "iss", "events", "zeit", "melde", "frag", "version"],
     }
 
     def gruppen(self) -> dict[str, list[str]]:

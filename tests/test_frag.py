@@ -670,8 +670,8 @@ def test_hilfe_bewirbt_frag_nur_wenn_es_an_ist(settings):
     assert "!frag" in run(an.cmd_help("sonst", "x"))
 
     # The count in the overview has to follow along, not just the list.
-    assert aus._uebersicht().startswith("24 Befehle")
-    assert an._uebersicht().startswith("25 Befehle")
+    assert aus._uebersicht().startswith("25 Befehle")
+    assert an._uebersicht().startswith("26 Befehle")
 
 
 def test_einzelhilfe_zu_frag_bleibt_erreichbar(settings):

@@ -16,6 +16,7 @@ from .config import Settings, load_settings
 from .handlers import az as h_az
 from .handlers import dx as h_dx
 from .handlers import events as h_events
+from .handlers import wissen as h_wissen
 from .handlers import frag as h_frag
 from .handlers import frag_tools as h_tools
 from .handlers import geo as h_geo
@@ -94,6 +95,7 @@ class Bot:
         self.frag_erreichbar: bool | None = None
         self.stale: dict[str, Any] = {}          # letzte gute Antwort je Schlüssel
         self.events = h_events.EventListe(settings.events_file)
+        self.wissen = h_wissen.Wissen(settings.wissen_file)
         self.router = Router(settings, {
             "wx": self.cmd_wx, "warn": self.cmd_warn, "sota": self.cmd_sota,
             "relais": self.cmd_relais, "ping": self.cmd_ping, "help": self.cmd_help,
@@ -712,7 +714,8 @@ class Bot:
                 try:
                     roh, werkzeuge = await h_tools.fetch(
                         self.http, self.settings, frage, h_frag.budget(self.settings),
-                        sender, {n: h for n, h in self.router.handlers.items() if n != "frag"})
+                        sender, {**{n: h for n, h in self.router.handlers.items() if n != "frag"},
+                         "wissen": self.wissen.handler})
                 except Exception as exc:
                     log.warning("frag_werkzeuge_fehler", sender=sender, frage=frage, error=str(exc))
                     roh = None

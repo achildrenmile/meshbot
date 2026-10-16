@@ -140,3 +140,15 @@ def test_wissen_treffer_geht_direkt_raus():
     text, benutzt = run(t.fetch(c, settings(), "x", 100, "OE8X", {"wissen": wissen}))
     assert text == "Original-Text (quelle)" and benutzt == ["wissen"]
     assert len(gesehen) == 1
+
+
+def test_wissen_bekommt_auch_die_originalfrage():
+    erhalten: list[str] = []
+
+    async def wissen(arg, sender):
+        erhalten.append(arg)
+        return "ok"
+
+    c = client([antwort(tool_calls=[call("wissen", {"thema": "repeater benennen"})])], [])
+    run(t.fetch(c, settings(), "Repeater AT-LV8-Name?", 100, "OE8X", {"wissen": wissen}))
+    assert "LV8" in erhalten[0] and "repeater benennen" in erhalten[0]

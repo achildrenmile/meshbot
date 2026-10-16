@@ -199,6 +199,7 @@ class Settings(BaseSettings):
     # (handlers/frag_tools.py). Aus, solange das Modell dahinter keine Werkzeuge
     # kann; das lokale Fallback-Modell ignoriert sie und antwortet wie bisher.
     frag_werkzeuge: bool = False
+    wissen_file: Path = Field(default=DATA_DIR / "wissen.json")
 
     # --- Wikipedia als Rueckfall, wenn das Modell passt ---
     # Greift nur, wenn die Modellantwort selbst "weiss ich nicht" sagt. Der

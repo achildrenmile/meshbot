@@ -145,9 +145,12 @@ async def fetch(client: httpx.AsyncClient, settings, frage: str, grenze: int, se
             fn = a.get("function", {})
             name = fn.get("name", "")
             if name in WERKZEUGE and name in verfuegbar:
-                ergebnis = await ausfuehren(
-                    name, _argument(name, fn.get("arguments", "")), sender,
-                    handlers[WERKZEUGE[name][0]])
+                arg = _argument(name, fn.get("arguments", ""))
+                if name in DIREKT:
+                    # Das Modell formuliert das Suchwort um und laesst dabei Woerter
+                    # weg (LV8); die Originalfrage ist die verlaessliche Quelle.
+                    arg = f"{arg} {frage}"
+                ergebnis = await ausfuehren(name, arg, sender, handlers[WERKZEUGE[name][0]])
                 benutzt.append(name)
                 if name in DIREKT and ergebnis not in ("Kein Ergebnis", "Fehler: Werkzeug nicht verfuegbar"):
                     return ergebnis, benutzt

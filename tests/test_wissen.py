@@ -18,7 +18,7 @@ E = {"thema": "Repeater benennen", "stichworte": ["repeater", "name"], "text": "
 
 def test_treffer_mit_quelle(tmp_path):
     w = datei(tmp_path, [E])
-    assert run(w.handler("repeater benennen", "x")) == "AT-BEZIRK-NAME (Quelle: meshcore.at)"
+    assert run(w.handler("repeater benennen", "x")) == "AT-BEZIRK-NAME (meshcore.at)"
 
 
 def test_kein_treffer(tmp_path):

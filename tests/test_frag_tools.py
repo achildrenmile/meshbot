@@ -128,3 +128,15 @@ def test_leere_antwort_wirft():
         assert False
     except ValueError:
         pass
+
+
+def test_wissen_treffer_geht_direkt_raus():
+    gesehen: list[dict] = []
+
+    async def wissen(arg, sender):
+        return "Original-Text (quelle)"
+
+    c = client([antwort(tool_calls=[call("wissen", {"thema": "repeater name"})])], gesehen)
+    text, benutzt = run(t.fetch(c, settings(), "x", 100, "OE8X", {"wissen": wissen}))
+    assert text == "Original-Text (quelle)" and benutzt == ["wissen"]
+    assert len(gesehen) == 1

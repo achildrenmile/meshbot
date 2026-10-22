@@ -251,7 +251,8 @@ class Router:
         if getippt in VERALTET:
             self.served += 1
             log.info("veralteter_befehl", cmd=getippt, sender=eingang.sender)
-            return prepare(VERALTET[getippt], self.settings.nutzlimit, self.settings.transliterate)
+            return prepare(VERALTET[getippt], self.settings.nutzlimit, self.settings.transliterate,
+                           self.settings.nutzlimit_bytes)
 
         handler = self.handlers.get(name)
         if handler is None:
@@ -265,4 +266,5 @@ class Router:
             return None
 
         self.served += 1
-        return prepare(antwort, self.settings.nutzlimit, self.settings.transliterate)
+        return prepare(antwort, self.settings.nutzlimit, self.settings.transliterate,
+                           self.settings.nutzlimit_bytes)

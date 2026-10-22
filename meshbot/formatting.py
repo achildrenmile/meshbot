@@ -23,22 +23,33 @@ def transliterate(text: str) -> str:
     return text
 
 
-def clamp(text: str, limit: int) -> str:
-    """Cut to the character limit, at a word boundary where possible.
+def utf8_len(text: str) -> int:
+    """Length on the air: the firmware counts bytes, an umlaut is two."""
+    return len(text.encode("utf-8"))
+
+
+def clamp(text: str, limit: int, max_bytes: int | None = None) -> str:
+    """Cut to the character limit (and the byte limit, if given), at a word
+    boundary where possible.
 
     The remainder is marked with a single character so the receiver can see
-    something is missing — cheaper than three dots.
+    something is missing -- cheaper than three dots. The ellipsis is three
+    bytes in UTF-8 and is counted as such. Never cuts through a multibyte
+    character.
     """
     text = " ".join(text.split())
-    if len(text) <= limit:
+    if len(text) <= limit and (max_bytes is None or utf8_len(text) <= max_bytes):
         return text
     cut = text[: limit - 1]
-    if " " in cut[int(limit * 0.6):]:
+    if max_bytes is not None and utf8_len(cut) > max_bytes - len("…".encode()):
+        cut = cut.encode("utf-8")[: max_bytes - len("…".encode())].decode("utf-8", "ignore")
+    ref = min(limit, len(cut) + 1)
+    if " " in cut[int(ref * 0.6):]:
         cut = cut[: cut.rindex(" ")]
     return cut.rstrip(" ,;:") + "…"
 
 
-def prepare(text: str, limit: int, do_transliterate: bool) -> str:
+def prepare(text: str, limit: int, do_transliterate: bool, max_bytes: int | None = None) -> str:
     if do_transliterate:
         text = transliterate(text)
-    return clamp(text, limit)
+    return clamp(text, limit, max_bytes)

@@ -695,10 +695,13 @@ class Bot:
         if not self.frag_enabled:
             return None
         frage = " ".join(arg.split())[: self.settings.frag_frage_max]
+        # "witz 90 zeichen": the number is the asker's upper bound, not part of the question.
+        frage, hinweis = h_frag.laengenhinweis(frage)
         if not frage:
             return self.usage("frag")
+        grenze = h_frag.grenze_fuer(self.settings, hinweis)
 
-        schluessel = frage.lower()
+        schluessel = frage.lower() + (f"|{grenze}" if hinweis else "")
         if schluessel in self.cache_frag:
             return self.cache_frag[schluessel]
 
@@ -715,7 +718,7 @@ class Bot:
             if self.settings.frag_werkzeuge:
                 try:
                     roh, werkzeuge = await h_tools.fetch(
-                        self.http, self.settings, frage, h_frag.budget(self.settings),
+                        self.http, self.settings, frage, grenze,
                         sender, {**{n: h for n, h in self.router.handlers.items() if n != "frag"},
                          "wissen": self.wissen.handler,
                          **({"suche": self.suche.handler} if self.suche else {})})
@@ -723,9 +726,9 @@ class Bot:
                     log.warning("frag_werkzeuge_fehler", sender=sender, frage=frage, error=str(exc))
                     roh = None
             if roh is None:
-                roh = await h_frag.fetch(self.http, self.settings, frage)
-            antwort = h_frag.render(roh, self.settings.frag_praefix,
-                                    h_frag.budget(self.settings))
+                roh = await h_frag.fetch(self.http, self.settings, frage, grenze)
+            antwort = await h_frag.antworten(self.http, self.settings, roh, frage, grenze,
+                                             nachfragen=not werkzeuge)
         except Exception as exc:
             log.warning("frag_fehler", sender=sender, frage=frage, error=str(exc))
             return None

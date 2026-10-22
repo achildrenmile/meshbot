@@ -23,6 +23,8 @@ from typing import Awaitable, Callable
 import httpx
 import structlog
 
+from .frag import als_roh, laengenregeln
+
 log = structlog.get_logger()
 
 MAX_RUNDEN = 3
@@ -73,8 +75,9 @@ def schema(namen: list[str]) -> list[dict]:
 def systemprompt(grenze: int) -> str:
     return (
         "Du beantwortest Fragen im Funknetz CarinthiaMesh. "
-        f"Antworte auf Deutsch, in einer einzigen Zeile, hoechstens {grenze} Zeichen. "
-        "Kein Markdown, keine Aufzaehlung, kein Vorspann, keine Rueckfrage. "
+        "Antworte auf Deutsch, in einer einzigen Zeile. "
+        "Keine Aufzaehlung, kein Vorspann, keine Rueckfrage. "
+        + laengenregeln(grenze) +
         "Ton: freundlich, gern mit einem Augenzwinkern, nie albern oder abwertend. "
         "Fuer aktuelle Daten (Wetter, Netz, Termine, Mond, ISS, DX, Relais) rufe das "
         "passende Werkzeug auf, statt zu raten, und antworte mit dem gemessenen Wert. "
@@ -139,7 +142,7 @@ async def fetch(client: httpx.AsyncClient, settings, frage: str, grenze: int, se
         msg = resp.json().get("choices", [{}])[0].get("message", {})
         aufrufe = msg.get("tool_calls") or []
         if not aufrufe:
-            text = str(msg.get("content") or "").strip()
+            text = als_roh(resp.json())
             if not text:
                 raise ValueError("leere Antwort vom Modell")
             return text, benutzt

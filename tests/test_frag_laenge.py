@@ -234,3 +234,10 @@ def test_prompt_verlangt_pointe_und_vollstaendigen_satz(settings):
     p = h_frag.systemprompt(h_frag.budget(settings))
     assert "Pointe" in p and "vollstaendiger Satz" in p and "Anfuehrungszeichen" in p
     assert "96" in p
+
+
+def test_emojis_fliegen_raus():
+    """The 22 Oct. joke ended in an emoji (4 bytes) and never arrived."""
+    assert h_frag.bereinigen("Sie sind immer auf Sendung! 📡") == "Sie sind immer auf Sendung!"
+    assert h_frag.bereinigen("Super 😄❤️ ja") == "Super ja"
+    assert h_frag.bereinigen("Größe äöü ß") == "Größe äöü ß"

@@ -42,6 +42,12 @@ from ..formatting import clamp, transliterate, utf8_len
 # `split()` below, which turns them into the single space they should be.
 MUELL = re.compile(r"[*_`#\\\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
+# Emojis and pictographs: outside the BMP (4 bytes in UTF-8) or in the symbol
+# blocks, plus the joiners that glue them together. A model adds them to jokes
+# unasked; the "Witz" answer of 22 Oct. ended in one and never showed up on
+# the channel.
+EMOJI = re.compile("[𐀀-􏿿☀-➿⬀-⯿︎️‍]")
+
 # Some models keep emitting a reasoning block even with thinking switched off.
 # Cheaper to drop it here than to rely on the model obeying.
 DENKBLOCK = re.compile(r"<think\b[^>]*>.*?</think>", re.DOTALL | re.IGNORECASE)
@@ -267,7 +273,7 @@ def laengenregeln(grenze: int) -> str:
     return (
         f"Deine Antwort ist ein vollstaendiger Satz oder Witz mit hoechstens {grenze} Zeichen, "
         f"am besten um die {ziel}. Sie wird nicht gekuerzt und darf nie mittendrin enden. "
-        "Keine Anfuehrungszeichen, kein Markdown. "
+        "Keine Anfuehrungszeichen, kein Markdown, keine Emojis. "
         "Bei Witzen: ein ganz kurzer Witz, Aufbau und Pointe zusammen innerhalb der Grenze, "
         "die Pointe ist Pflicht. Lieber ein kuerzerer Witz als eine fehlende Pointe. "
         "Erfinde bei Witzen einen neuen, wiederhole die Beispiele nicht. "
@@ -464,6 +470,7 @@ def bereinigen(text: str) -> str:
     """Scrub model output: reasoning block, junk, preamble, quotation marks."""
     text = DENKBLOCK.sub("", text)
     text = MUELL.sub("", text)
+    text = EMOJI.sub("", text)
     text = " ".join(text.split())
     text = VORSPANN.sub("", text).strip(" \"'„“”‚‘’»«")
     if not text:

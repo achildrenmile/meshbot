@@ -70,6 +70,14 @@ class Settings(BaseSettings):
     # the answer vanishes without a trace. Sender names on the network run to 21
     # characters.
     sender_reserve: int = 24
+    # MeshCore firmware, MAX_TEXT_LEN: the channel text -- "<node name>: <text>" --
+    # may be 160 **bytes** (checked against upstream MeshCore main; the node
+    # firmware actually flashed is not verified from here). `sendGroupMessage`
+    # builds the prefix itself and cuts the rest byte-wise, so a long answer
+    # does not fail, it loses its end. That is exactly the "punchline missing"
+    # case.
+    max_text_bytes: int = 160
+    node_name: str = "AT-VL-Nötsch-ObsBot"
     # Umlauts may go on the air. The displays on the network handle them, and
     # "Nötsch" is the name of the place -- "Noetsch" was a stopgap from the time
     # when that was not settled.
@@ -235,6 +243,11 @@ class Settings(BaseSettings):
     def nutzlimit(self) -> int:
         """Characters left to the bot for its own text."""
         return self.max_msg_len - self.sender_reserve
+
+    @property
+    def nutzlimit_bytes(self) -> int:
+        """Bytes left to the bot's own text after the node's "<name>: " prefix."""
+        return self.max_text_bytes - len(f"{self.node_name}: ".encode("utf-8"))
 
 
 def load_settings() -> Settings:

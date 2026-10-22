@@ -15,15 +15,16 @@ minor for a new command, patch for a fix.
 
 from __future__ import annotations
 
-VERSION = "1.10.0"
+VERSION = "1.10.1"
 
 # One line, fit for the radio network. No longer than necessary -- the prefix
 # "MeshBot <version>: " comes off the budget.
-KURZ = "!frag kann im Web nachsehen"
+KURZ = "!frag: Witze mit Pointe, Laengenangabe"
 
 # The recent releases, newest first. Serves conversational debugging ("you are
 # still on 1.4") and never goes on the air.
 VERLAUF = [
+    ("1.10.1", "2026-10-22", "!frag kuerzt nicht mehr mitten im Satz: Limit in UTF-8-Bytes, bei zu langer Antwort bis zu zweimal strenger nachgefragt, Laengenangabe wie 90 Zeichen als Obergrenze"),
     ("1.10.0", "2026-10-16", "!frag bekommt das Werkzeug suche: Websuche ueber eigene SearXNG-Instanz (SEARCH_URL), nur Domain, Titel und kurzer Auszug"),
     ("1.9.4", "2026-10-16", "Werkzeug wissen sucht mit Modell-Suchwort und Originalfrage zusammen; das Modell liess sonst Woerter wie LV8 weg"),
     ("1.9.3", "2026-10-16", "Werkzeug wissen erkennt Wortformen (gleicher Wortanfang ab 5 Buchstaben, ss=ß): benenne, Benennung, nennen finden denselben Eintrag"),

@@ -29,7 +29,7 @@ import re
 
 import httpx
 
-from ..formatting import transliterate
+from ..formatting import clamp, transliterate, utf8_len
 
 # Markdown, control characters and the backslash. The backslash is the dangerous
 # one: it survives the quote replacement in on_message and breaks the JSON
@@ -255,6 +255,25 @@ def kuerzen_am_satzende(text: str, grenze: int) -> str:
     return text
 
 
+def laengenregeln(grenze: int) -> str:
+    """The length and form rules, shared by both prompts (plain and tool loop).
+
+    The model overshoots a stated limit, so the code checks and re-asks
+    (`antworten`); this text only makes the first attempt likelier to fit.
+    A joke is the worst case: setup and punchline must both fit, and a cut
+    joke is worse than no joke -- hence the explicit "shorter joke" rule.
+    """
+    ziel = max(20, int(grenze * 0.85))
+    return (
+        f"Deine Antwort ist ein vollstaendiger Satz oder Witz mit hoechstens {grenze} Zeichen, "
+        f"am besten um die {ziel}. Sie wird nicht gekuerzt und darf nie mittendrin enden. "
+        "Keine Anfuehrungszeichen, kein Markdown. "
+        "Bei Witzen: ein ganz kurzer Witz, Aufbau und Pointe zusammen innerhalb der Grenze, "
+        "die Pointe ist Pflicht. Lieber ein kuerzerer Witz als eine fehlende Pointe. "
+        "Erfinde bei Witzen einen neuen, wiederhole die Beispiele nicht. "
+    )
+
+
 def systemprompt(grenze: int) -> str:
     """The instruction the model gets. Short on purpose.
 
@@ -268,9 +287,10 @@ def systemprompt(grenze: int) -> str:
     """
     return (
         "Du beantwortest Fragen im Funknetz CarinthiaMesh. "
-        f"Antworte auf Deutsch, in einer einzigen Zeile, hoechstens {grenze} Zeichen. "
-        "Kein Markdown, keine Aufzaehlung, kein Vorspann, keine Rueckfrage. "
+        "Antworte auf Deutsch, in einer einzigen Zeile. "
+        "Keine Aufzaehlung, kein Vorspann, keine Rueckfrage. "
         "Nenne nur die Antwort selbst. "
+        + laengenregeln(grenze) +
         "Wenn du es nicht sicher weisst, antworte genau: weiss ich nicht. "
         "Zum Zustand dieses Netzes und zu Hoehen in der Region nennst du keine "
         "eigenen Zahlen, sondern verweist auf den Befehl, der es misst. "
@@ -312,6 +332,10 @@ def systemprompt(grenze: int) -> str:
         # Das Ziel ist hier nicht die richtige Antwort, sondern das Eingestaendnis:
         # sagt das Modell "weiss ich nicht", greift der Wikipedia-Rueckfall und
         # der beantwortet genau diese Frageform richtig.
+        "Frage: Erzaehl einen Witz. "
+        "Antwort: Was macht die Antenne beim Arzt? Sie klagt ueber Stehwellen. "
+        "Frage: Kurzer Funkerwitz. "
+        "Antwort: Warum ist der Funker so ruhig? Er hat Sendepause. "
         "Frage: Wo liegt Villach? "
         "Antwort: weiss ich nicht."
         # Hier stand ein Gegenbeispiel ("Welche Repeater stehen auf dem
@@ -326,30 +350,56 @@ def systemprompt(grenze: int) -> str:
     )
 
 
-async def fetch(client: httpx.AsyncClient, settings, frage: str) -> str:
-    """One request through the LiteLLM gateway. Raises on anything unusable —
+class Roh(str):
+    """Model output plus whether the gateway reported it as cut off.
+
+    A str, so everything that treated the answer as text keeps working.
+    OpenAI schema (via LiteLLM): `finish_reason == "length"` means the token
+    ceiling hit mid-answer -- the text is unusable as it stands.
+    """
+
+    abgeschnitten: bool = False
+
+
+def als_roh(daten: dict) -> Roh:
+    wahl = (daten.get("choices") or [{}])[0]
+    text = Roh(str(wahl.get("message", {}).get("content", "") or "").strip())
+    text.abgeschnitten = wahl.get("finish_reason") == "length"
+    return text
+
+
+async def fetch(client: httpx.AsyncClient, settings, frage: str,
+                grenze: int | None = None, vorher: str | None = None) -> Roh:
+    """One request through the LiteLLM gateway. Raises on anything unusable --
     the caller stays silent.
 
     Deliberately not routed through `Bot._mit_retry`: with `http_retries=1` a
     timeout would turn 20 seconds into 40, and by then the answer is worthless
-    anyway. One attempt, then nothing. The gateway itself also has
-    `num_retries: 0` for the same reason (docs/llm-gateway.md in dcsetup) --
-    there is exactly one GPU behind it, and a retry only ever makes a timeout
-    worse, never better.
+    anyway. The gateway itself also has `num_retries: 0` for the same reason
+    (docs/llm-gateway.md in dcsetup) -- there is exactly one GPU behind it.
+    Re-asking about the *length* is a different thing and lives in `antworten`.
 
     `max_tokens` is the real cost ceiling in the OpenAI schema (LiteLLM maps it
-    to Ollama's native `num_predict` -- verified live, see docs/llm-gateway.md).
-    It bounds not just the length of the answer but the time the machine
-    spends on it, so a model that ignores the system prompt and starts an
-    essay cannot occupy the service.
+    to Ollama's native `num_predict`). `vorher` is a previous answer that was
+    too long: it goes back as context together with a stricter limit.
 
     No `think` field here on purpose: verified (2026-09-27) that LiteLLM's
-    `ollama_chat` provider does not translate it, in the request body or in
-    the gateway's own model config, to Ollama's native thinking control --
-    moot anyway, since `frag_model` never points at a reasoning model.
+    `ollama_chat` provider does not translate it.
     """
-    grenze = budget(settings)
+    grenze = grenze if grenze is not None else budget(settings)
     headers = {"Authorization": f"Bearer {settings.litellm_api_key}"} if settings.litellm_api_key else {}
+    nachrichten = [
+        {"role": "system", "content": systemprompt(grenze)},
+        {"role": "user", "content": frage},
+    ]
+    if vorher is not None:
+        nachrichten += [
+            {"role": "assistant", "content": vorher},
+            {"role": "user", "content": (
+                f"Das war zu lang ({len(vorher)} Zeichen). Schreibe es neu mit hoechstens "
+                f"{grenze} Zeichen, als vollstaendigen Satz, bei einem Witz mit Pointe, "
+                "ohne Anfuehrungszeichen. Nur den Text.")},
+        ]
     resp = await client.post(
         settings.ollama_url,
         headers=headers,
@@ -358,21 +408,98 @@ async def fetch(client: httpx.AsyncClient, settings, frage: str) -> str:
             "stream": False,
             "max_tokens": settings.frag_num_predict,
             # Low, not zero: zero makes small models repeat themselves when
-            # a question has no good answer.
-            "temperature": 0.3,
-            "messages": [
-                {"role": "system", "content": systemprompt(grenze)},
-                {"role": "user", "content": frage},
-            ],
+            # a question has no good answer. Jokes get more, otherwise the
+            # model tells the example from the prompt every time.
+            "temperature": 0.8 if "witz" in frage.lower() else 0.3,
+            "messages": nachrichten,
         },
         timeout=settings.frag_timeout_s,
     )
     resp.raise_for_status()
-    daten = resp.json()
-    text = str(daten.get("choices", [{}])[0].get("message", {}).get("content", "")).strip()
+    text = als_roh(resp.json())
     if not text:
         raise ValueError("leere Antwort vom Modell")
     return text
+
+
+# "90 Zeichen", "max 80 Buchstaben", "in 60 chars" -- the asker's own limit.
+LAENGENHINWEIS = re.compile(
+    r"\b(?:(?:max(?:imal)?\.?|hoechstens|höchstens|bis(?: zu)?|in|unter|ca\.?|etwa)\s+)?"
+    r"(\d{1,3})\s*(?:zeichen|buchstaben|chars?|characters)\b", re.IGNORECASE)
+
+MIN_GRENZE = 20
+RETRIES = 2
+# Per retry the limit given to the model shrinks to this share of the original.
+STRENGER = (0.8, 0.65)
+
+
+def laengenhinweis(frage: str) -> tuple[str, int | None]:
+    """Split "Witz 90 Zeichen" into ("Witz", 90). The hint is not part of the question."""
+    m = LAENGENHINWEIS.search(frage)
+    if m is None:
+        return frage, None
+    rest = " ".join((frage[: m.start()] + " " + frage[m.end():]).split())
+    return rest, int(m.group(1))
+
+
+def grenze_fuer(settings, hinweis: int | None = None) -> int:
+    """Characters for the model text. The asker's number is the size of the
+    whole line on his screen, so the prefix comes off; never above the budget."""
+    g = budget(settings)
+    if hinweis is not None:
+        g = min(g, max(MIN_GRENZE, hinweis - len(settings.frag_praefix) - 1))
+    return g
+
+
+def budget_bytes(settings) -> int:
+    """Bytes left to the model after the node name and the `KI:` prefix."""
+    return settings.nutzlimit_bytes - utf8_len(settings.frag_praefix + " ")
+
+
+def passt(text: str, grenze: int, grenze_bytes: int) -> bool:
+    return len(text) <= grenze and utf8_len(text) <= grenze_bytes
+
+
+def bereinigen(text: str) -> str:
+    """Scrub model output: reasoning block, junk, preamble, quotation marks."""
+    text = DENKBLOCK.sub("", text)
+    text = MUELL.sub("", text)
+    text = " ".join(text.split())
+    text = VORSPANN.sub("", text).strip(" \"'„“”‚‘’»«")
+    if not text:
+        raise ValueError("nach dem Aufraeumen blieb nichts uebrig")
+    return text
+
+
+async def antworten(client: httpx.AsyncClient, settings, roh: str, frage: str,
+                    grenze: int | None = None, nachfragen: bool = True) -> str:
+    """Raw model output to the finished line, guaranteed to fit.
+
+    Too long (characters or UTF-8 bytes) or cut off by the token ceiling: ask
+    again, at most `RETRIES` times, each time with a stricter limit and the
+    too-long answer as context. Only then trim -- whole sentences first, then at
+    a word boundary with "…", never through a multibyte character.
+    """
+    grenze = grenze if grenze is not None else budget(settings)
+    gbytes = budget_bytes(settings)
+    text = bereinigen(roh)
+
+    def zu_lang() -> bool:
+        return getattr(roh, "abgeschnitten", False) or not passt(text, grenze, gbytes)
+
+    for versuch in range(RETRIES if nachfragen else 0):
+        if not zu_lang():
+            break
+        strenger = max(MIN_GRENZE, int(grenze * STRENGER[versuch]))
+        try:
+            roh = await fetch(client, settings, frage, strenger, vorher=text)
+            text = bereinigen(roh)
+        except Exception:
+            break
+    if zu_lang():
+        text = kuerzen_am_satzende(text, grenze)
+        text = clamp(text, grenze, gbytes)
+    return f"{settings.frag_praefix} {text}"
 
 
 def render(text: str, praefix: str, grenze: int | None = None) -> str:
@@ -384,16 +511,10 @@ def render(text: str, praefix: str, grenze: int | None = None) -> str:
     sentence trim comes last, on clean text, because a stray markdown dot would
     otherwise pass for a sentence end.
 
-    `grenze` is optional so the scrubbing can be tested on its own. In
-    operation it is always given: without it an over-long answer falls through
-    to `clamp()` and gets cut mid-sentence.
+    Plain scrub plus sentence trim. Operation goes through `antworten`, which
+    re-asks before it trims anything.
     """
-    text = DENKBLOCK.sub("", text)
-    text = MUELL.sub("", text)
-    text = " ".join(text.split())
-    text = VORSPANN.sub("", text).strip(" \"'")
-    if not text:
-        raise ValueError("nach dem Aufraeumen blieb nichts uebrig")
+    text = bereinigen(text)
     if grenze is not None:
         text = kuerzen_am_satzende(text, grenze)
     return f"{praefix} {text}"

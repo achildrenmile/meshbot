@@ -46,3 +46,19 @@ def test_wortformen_und_eszett(tmp_path):
         assert w.suche(frage), frage
     assert not w.suche("Wie ist das Wetter?")
     assert not w.suche("Repeater")
+
+
+def test_direkt_nur_mit_flag(tmp_path):
+    lv8 = {"thema": "LV8", "stichworte": ["lv8", "repeater", "konvention"], "text": "Elite", "quelle": "x", "direkt": True}
+    w = datei(tmp_path, [E, lv8])
+    assert w.direkt("was ist ein at-lv8 repeater?") == "Elite (x)"
+    assert w.direkt("repeater name") is None
+    assert w.direkt("wetter") is None
+
+
+def test_enthaelt_filtert_eintrag(tmp_path):
+    ernst = {"thema": "LV8 ernst", "stichworte": ["lv8", "repeater", "ernst"], "text": "Elite", "direkt": True, "enthaelt": ["im ernst"]}
+    scherz = {"thema": "LV8", "stichworte": ["lv8", "repeater"], "text": "Scherz", "direkt": True}
+    w = datei(tmp_path, [scherz, ernst])
+    assert w.direkt("Im Ernst. Was ist ein LV8-Repeater?") == "Elite"
+    assert w.direkt("Was ist ein LV8-Repeater?") == "Scherz"

@@ -68,7 +68,7 @@ a trace. The bot's usable budget is `MAX_MSG_LEN - SENDER_RESERVE`.
 | `!quota` | `!kontingent`, `!rest` | `Kontingent: 44/50 pro 1h00 frei. Bot 12/12 pro 10min` |
 | `!ping` | | `MeshBot OK, up 3d4h, 42 cmds` |
 | `!frag <question>` | `!frage`, `!ask`, `!ki` | `KI: Ein Repeater verstärkt und weiterleitet Signale im Funknetz.` |
-| `!version` | `!ver`, `!stand` | `MeshBot 1.10.1: !frag: Witze mit Pointe, Laengenangabe` |
+| `!version` | `!ver`, `!stand` | `MeshBot 1.10.2: !frag: gepflegte Wissens-Antworten ohne Modell` |
 | `!help [cmd\|group]` | `!hilfe` | Overview; with a command, the details |
 
 Without a place, `!wx` and `!relais` use the default location from the configuration.

@@ -708,6 +708,11 @@ class Bot:
         if not self.frag_sender.allow(sender):
             log.info("frag_absenderlimit", sender=sender)
             return None
+        gepflegt = self.wissen.direkt(frage)
+        if gepflegt is not None:
+            log.info("frag_wissen_direkt", sender=sender, frage=frage)
+            return gepflegt
+
         if not self.frag_tag.allow():
             log.info("frag_tageslimit", sender=sender)
             return None

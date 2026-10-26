@@ -58,20 +58,40 @@ class Wissen:
                 log.warning("wissen_nicht_lesbar", fehler=str(exc))
         return self._eintraege
 
-    def suche(self, frage: str) -> list[dict]:
+    def _bewertet(self, frage: str) -> list[tuple[int, dict]]:
         gesucht = _worte(frage)
+        klein = " ".join(frage.lower().replace("ß", "ss").split())
         bewertet = []
         for e in self.aktuell():
+            if not all(str(t).lower() in klein for t in e.get("enthaelt", [])):
+                continue
             stich = _worte(" ".join(map(str, e.get("stichworte", [])))) | _worte(str(e.get("thema", "")))
             punkte = sum(1 for s in stich if any(_passt(g, s) for g in gesucht))
             if punkte >= MIN_PUNKTE:
                 bewertet.append((punkte, e))
         bewertet.sort(key=lambda p: -p[0])
-        return [e for _, e in bewertet[:MAX_TREFFER]]
+        return bewertet
+
+    def suche(self, frage: str) -> list[dict]:
+        return [e for _, e in self._bewertet(frage)[:MAX_TREFFER]]
+
+    def direkt(self, frage: str) -> str | None:
+        """Antwort ohne Modell, wenn der beste Treffer `"direkt": true` traegt.
+
+        Das Modell ruft das Werkzeug bei Fragen wie "was ist ein AT-LV8 Repeater"
+        nicht auf und erfindet eine Antwort; deterministisch geht vor Prompt.
+        """
+        bewertet = self._bewertet(frage)
+        if bewertet and bewertet[0][1].get("direkt") is True:
+            return self._text(bewertet[0][1])
+        return None
+
+    @staticmethod
+    def _text(e: dict) -> str:
+        return f"{e['text']}" + (f" ({e['quelle']})" if e.get("quelle") else "")
 
     async def handler(self, arg: str, sender: str) -> str | None:
         treffer = self.suche(arg)
         if not treffer:
             return None
-        return " | ".join(
-            f"{e['text']}" + (f" ({e['quelle']})" if e.get("quelle") else "") for e in treffer)
+        return " | ".join(self._text(e) for e in treffer)
